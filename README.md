@@ -17,29 +17,33 @@
 ### 1、maven配置文件
 通过maven生成一个webapp项目，例如项目名为weixin，在maven配置文件pom.xml中添加jwx依赖，jwx的1.0.0jar包已经提交到maven中心仓库，通过[中心仓库](http://search.maven.org/)搜索jwx关键字可以获取jar包依赖配置。
 
-	<dependency>
-	    <groupId>com.github.jweixin</groupId>
-	    <artifactId>jwx</artifactId>
-	    <version>1.0.0</version>
-	</dependency>
+```xml
+<dependency>
+    <groupId>com.github.jweixin</groupId>
+    <artifactId>jwx</artifactId>
+    <version>1.0.0</version>
+</dependency>
+```
 
 ### 2、web.xml文件配置
 web.xml是web应用的配置文件，jwx从spring配置文件中获取配置信息，所以必须配置spring上下文环境；另外，需要配置微信消息处理分发Servlet(WeixinDispatcherServlet)，用于处理微信送过来的请求消息或事件。jwx对springmvc没有依赖关系，web mvc框架可以根据实际需要配置。
 
-    <listener>
-		<listener-class>org.springframework.web.context.ContextLoaderListener</listener-class>
-	</listener>
-	
-	<servlet>
-		<servlet-name>weixin</servlet-name>
-		<servlet-class>com.github.jweixin.jwx.servlet.WeixinDispatcherServlet</servlet-class>
-		<load-on-startup>1</load-on-startup>
-	</servlet>
-	
-	<servlet-mapping>
-		<servlet-name>weixin</servlet-name>
-		<url-pattern>/wx/*</url-pattern>
-	</servlet-mapping>
+```xml
+<listener>
+	<listener-class>org.springframework.web.context.ContextLoaderListener</listener-class>
+</listener>
+
+<servlet>
+	<servlet-name>weixin</servlet-name>
+	<servlet-class>com.github.jweixin.jwx.servlet.WeixinDispatcherServlet</servlet-class>
+	<load-on-startup>1</load-on-startup>
+</servlet>
+
+<servlet-mapping>
+	<servlet-name>weixin</servlet-name>
+	<url-pattern>/wx/*</url-pattern>
+</servlet-mapping>
+```
 
 - load-on-startup表示Servlet在web应用启动阶段加载，数字代表了启动次序，如果项目使用了springmvc框架，可以调整该数字为2，放到springmvc框架后面启动加载，但实际上Servlet的启动次序并没有太大的关系。
 - spring配置是jwx必须的，如果没有配置spring上下文，jwx在启动阶段会报错。
@@ -47,15 +51,17 @@ web.xml是web应用的配置文件，jwx从spring配置文件中获取配置信�
 ### 3、spring配置文件
 spring配置文件applicationContext.xml里面需要配置WeixinConfigurer，这是jwx唯一必须配置项，如果没有配置，启动阶段会报错。
 
-    <context:component-scan base-package="com.github.jweixin.jwx.weixin.service" />
+```xml
+<context:component-scan base-package="com.github.jweixin.jwx.weixin.service" />
 
-    <bean class="com.github.jweixin.jwx.config.WeixinConfigurer">
-        <property name="packages">
-            <list>
-                <value>com.telecomjs.yc.controller</value>
-            </list>
-        </property>
-    </bean>
+<bean class="com.github.jweixin.jwx.config.WeixinConfigurer">
+    <property name="packages">
+        <list>
+            <value>com.telecomjs.yc.controller</value>
+        </list>
+    </property>
+</bean>
+```
 
 - component-scan配置了微信接口服务类，里面包含常用的微信公众号接口服务，例如菜单管理、消息服务、二维码服务、用户管理、微信网页授权、素材管理等服务内容，在web应用控制器类和微信控制器类里面可以通过@Autowired注解来注入服务。本配置并不是必须项。
 - WeixinConfigurer是唯一需要配置的部分，packages属性必须配置，里面是微信控制器包路径列表，WeixinDispatcherServlet在启动阶段会扫描包路径及其下面的子包路径，如果类拥有@Weixin注解，则该类会被当作微信控制器类加载到微信上下文。
@@ -63,24 +69,40 @@ spring配置文件applicationContext.xml里面需要配置WeixinConfigurer，这
 ### 4、编写微信控制器类
 当配置完上面的3个部分，所有的配置文件就结束了，是不是很简单呢。下面我们只需要写微信控制器类就能让我们的微信公众号活起来了。微信控制器类是用@Weixin注解的普通类，与sprngmvc里面的controller很类似，方法的执行也很类似。我们在com.telecomjs.yc.controller包下建一个java类WeixinController，如下：
 
-    package com.telecomjs.yc.controller;
+```java
+package com.telecomjs.yc.controller;
 
-    import com.github.jweixin.jwx.context.Weixin;
-    import com.github.jweixin.jwx.message.annotation.TextMsg;
+import com.github.jweixin.jwx.context.Weixin;
+import com.github.jweixin.jwx.message.annotation.TextMsg;
 
-    @Weixin(value="/wx/coreServlet",
-       appID="xxx",
-       appSecret="xxx",
-       encodingAESKey="xxx",
-       token="xxx")
-    public class WeixinController {
-	
-		@TextMsg("foo")
-		public String foo(){
-			return "bar";
-		}
+@Weixin(value="/wx/coreServlet",
+   appID="xxx",
+   appSecret="xxx",
+   encodingAESKey="xxx",
+   token="xxx")
+public class WeixinController {
+
+	@TextMsg("foo")
+	public String foo(){
+		return "bar";
 	}
+}
+```
 
 - @Weixin需要配置value值，这个实际就是微信服务器配置里面URL最后的部分，**当然不包含域名和web应用的上下文**，切记，不能包含web应用上下文，其他4个部分配置内容也是公众号配置内容，我们只需要登录到公众号看下填进去就行了。如果没有配置encodingAESKey，那么是不能处理加密消息的，如果有log4j的配置文件，启动阶段会给出告警信息的。
+
 - 同一个公众号可以配置多个@Weixin注解控制器类，其中只需要一个有其他4项配置就可以了，如果多个控制器类配置了其他4个配置项，如果相对应的配置项值不相同，启动阶段会报错。
+
 - 不同微信公众号是通过@Weixin的value值区分的，该值同时是微信上下文的查找关键字。
+
+- foo方法上面有@TextMsg注解，是定义的微信方法，在Servlet启动时通过包扫描加载到微信上下文对象中。jwx针对微信消息或事件类型设计了一组微信注解，基本涵盖了微信公众号定义的消息和事件类型。
+
+- @TextMsg是文本消息注解，代表请求类型的是文本消息，value值是发送的文本消息内容。处理文本适配模式，@TextMsg还支持正则表达式适配模式，这部分内容在配置部分说明。
+
+- 本例中微信方法并没有设置参数，实际可以灵活设置参数，例如我们可以在方法中设置HttpServletRequest request，HttpServletResponse response，InMessage in, WeixinContext context等参数，这部分内容也放在配置部分说明。
+
+- 本例中方法的返回类型是String，代表响应的消息内容是文本消息，jwx提供了丰富的返回值类型，这部分内容会在配置部分详细说明。
+
+  ### 5、启动web应用
+
+  上面就是这个最简单例子的全部内容，让我们启动web应用，进入到我们的公众号，输入foo文本提交，看看返回的是不是bar这个内容了，如果是，恭喜你，你已经初步掌握了jwx的使用方法。下面更多的内容等着你呢！
