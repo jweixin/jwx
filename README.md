@@ -32,7 +32,7 @@ web.xml是web应用的配置文件，jwx从spring配置文件中获取配置信�
 	
 	<servlet>
 		<servlet-name>weixin</servlet-name>
-		<servlet-class>com.github.jweixin.jwx.config.WeixinConfigurer</servlet-class>
+		<servlet-class>com.github.jweixin.jwx.servlet.WeixinDispatcherServlet</servlet-class>
 		<load-on-startup>1</load-on-startup>
 	</servlet>
 	
@@ -45,5 +45,42 @@ web.xml是web应用的配置文件，jwx从spring配置文件中获取配置信�
 - spring配置是jwx必须的，如果没有配置spring上下文，jwx在启动阶段会报错。
 - url-pattern模式匹配微信公众号平台服务器配置的URL配置，如果需要处理多个微信公众号，可以配置多个servlet-mapping或者使用路径通配符匹配多个url链接。
 ### 3、spring配置文件
+spring配置文件applicationContext.xml里面需要配置WeixinConfigurer，这是jwx唯一必须配置项，如果没有配置，启动阶段会报错。
 
+    <context:component-scan base-package="com.github.jweixin.jwx.weixin.service" />
 
+    <bean class="com.github.jweixin.jwx.config.WeixinConfigurer">
+        <property name="packages">
+            <list>
+                <value>com.telecomjs.yc.controller</value>
+            </list>
+        </property>
+    </bean>
+
+- component-scan配置了微信接口服务类，里面包含常用的微信公众号接口服务，例如菜单管理、消息服务、二维码服务、用户管理、微信网页授权、素材管理等服务内容，在web应用控制器类和微信控制器类里面可以通过@Autowired注解来注入服务。本配置并不是必须项。
+- WeixinConfigurer是唯一需要配置的部分，packages属性必须配置，里面是微信控制器包路径列表，WeixinDispatcherServlet在启动阶段会扫描包路径及其下面的子包路径，如果类拥有@Weixin注解，则该类会被当作微信控制器类加载到微信上下文。
+- 除了packages属性是必须配置的，其他配置都有缺省值，包括消息缓存、微信方法线程池的大小、微信方法调用超时阀值等，这部分内容放在配置部分说明了。
+### 4、编写微信控制器类
+当配置完上面的3个部分，所有的配置文件就结束了，是不是很简单呢。下面我们只需要写微信控制器类就能让我们的微信公众号活起来了。微信控制器类是用@Weixin注解的普通类，与sprngmvc里面的controller很类似，方法的执行也很类似。我们在com.telecomjs.yc.controller包下建一个java类WeixinController，如下：
+
+    package com.telecomjs.yc.controller;
+
+    import com.github.jweixin.jwx.context.Weixin;
+    import com.github.jweixin.jwx.message.annotation.TextMsg;
+
+    @Weixin(value="/wx/coreServlet",
+       appID="xxx",
+       appSecret="xxx",
+       encodingAESKey="xxx",
+       token="xxx")
+    public class WeixinController {
+	
+		@TextMsg("foo")
+		public String foo(){
+			return "bar";
+		}
+	}
+
+- @Weixin需要配置value值，这个实际就是微信服务器配置里面URL最后的部分，**当然不包含域名和web应用的上下文**，切记，不能包含web应用上下文，其他4个部分配置内容也是公众号配置内容，我们只需要登录到公众号看下填进去就行了。如果没有配置encodingAESKey，那么是不能处理加密消息的，如果有log4j的配置文件，启动阶段会给出告警信息的。
+- 同一个公众号可以配置多个@Weixin注解控制器类，其中只需要一个有其他4项配置就可以了，如果多个控制器类配置了其他4个配置项，如果相对应的配置项值不相同，启动阶段会报错。
+- 不同微信公众号是通过@Weixin的value值区分的，该值同时是微信上下文的查找关键字。
