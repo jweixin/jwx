@@ -21,7 +21,7 @@
 <dependency>
     <groupId>com.github.jweixin</groupId>
     <artifactId>jwx</artifactId>
-    <version>1.0.1</version>
+    <version>1.0.2</version>
 </dependency>
 ```
 
