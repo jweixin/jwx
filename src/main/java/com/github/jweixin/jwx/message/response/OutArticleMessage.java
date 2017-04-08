@@ -1,5 +1,6 @@
 package com.github.jweixin.jwx.message.response;
 
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
@@ -13,7 +14,7 @@ import com.github.jweixin.jwx.message.request.InMessage;
  */
 public class OutArticleMessage extends OutMessage {
 	// 图文消息个数，限制为8条以内;多条图文消息信息，默认第一个item为大图,注意，如果图文数超过8，则将会无响应
-	private List<Article> articles;
+	private List<Article> articles = new ArrayList<Article>();
 
 	public OutArticleMessage(InMessage inMessage) {
 		super(inMessage);
