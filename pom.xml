@@ -9,7 +9,7 @@
 
 	<name>jwx</name>
 	<url>http://maven.apache.org</url>
-	<description>java weixin mvc deploy framework</description>
+	<description>java weixin mvc development framework</description>
 
 	<licenses>
 		<license>
