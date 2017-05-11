@@ -85,32 +85,28 @@ import com.github.jweixin.jwx.weixin.entity.ReturnCode;
 
 /**
  * 微信url分发servlet
+ * 
  * @author zzx
- * @version 1.0 
- * 2017-1-12 初始开发
- * 2017-1-23 增加子线程调度微信方法部分
- * 2017-2-4 实现长执行通过微信客服接口返回结果
- * 2017-2-27 增加缺省消息或事件处理
- * 2017-3-2 增加方法调用异常处理
- * 2017-3-9 增加线程池执行微信方法部分
- * 2017-5-11 修改包扫描获取微信注解类部分
+ * @version 1.0 2017-1-12 初始开发 2017-1-23 增加子线程调度微信方法部分 2017-2-4
+ *          实现长执行通过微信客服接口返回结果 2017-2-27 增加缺省消息或事件处理 2017-3-2 增加方法调用异常处理 2017-3-9
+ *          增加线程池执行微信方法部分 2017-5-11 修改包扫描获取微信注解类部分
  */
 public class WeixinDispatcherServlet extends HttpServlet {
-	
+
 	private static final long serialVersionUID = 1L;
-	
+
 	private static Logger logger = Logger.getLogger(WeixinDispatcherServlet.class);
 
 	/**
 	 * web应用的spring容器上下文
 	 */
 	private WebApplicationContext webApplicationContext;
-	
+
 	/**
 	 * 请求消息工厂
 	 */
 	private InMessageFactory inFactory = InMessageFactory.getInstance();
-	
+
 	/**
 	 * 消息策略工厂
 	 */
@@ -124,249 +120,228 @@ public class WeixinDispatcherServlet extends HttpServlet {
 	 */
 	private ExecutorService executorService;
 	/**
-	 * url链接与微信上下文的映射关系
-	 * 微信上下文在servlet初始化时装载配置
+	 * url链接与微信上下文的映射关系 微信上下文在servlet初始化时装载配置
 	 */
 	private Map<String, WeixinContext> contextMapper = new HashMap<String, WeixinContext>();
 	/**
 	 * 微信方法调用超时阀值
 	 */
 	private long weixinMethodTimeoutThreshold;
-	
+
 	@Override
 	public void init(ServletConfig config) throws ServletException {
 		super.init(config);
-		//获取servlet容器的spring配置上下文
+		// 获取servlet容器的spring配置上下文
 		webApplicationContext = WebApplicationContextUtils.getRequiredWebApplicationContext(getServletContext());
-		
-		//获取上下文里面的微信包扫描配置
+
+		// 获取上下文里面的微信包扫描配置
 		WeixinConfigurer weixinConfig = webApplicationContext.getBean(WeixinConfigurer.class);
 		if (weixinConfig == null || weixinConfig.getPackages() == null || weixinConfig.getPackages().size() == 0) {
 			throw new InitialWeixinConfigureException("spring配置文件中缺少微信包扫描配置");
 		}
-		
-		//去除重复的包名和子包名
+
+		// 去除重复的包名和子包名
 		List<String> packageNames = weixinConfig.getPackages();
 		List<String> candidatePackages = new ArrayList<String>();
-		
+
 		Iterator<String> iter = packageNames.iterator();
-		while(iter.hasNext()){
+		while (iter.hasNext()) {
 			String packageName = iter.next().trim();
 			boolean include = false;
 			Iterator<String> it = candidatePackages.iterator();
-			while(it.hasNext()){
+			while (it.hasNext()) {
 				String pkgName = it.next();
-				//如果候选包名等于本次迭代的包名，则跳过
-				if(pkgName.equals(packageName)){
+				// 如果候选包名等于本次迭代的包名或者是本次迭代包的父包，则跳过
+				if (pkgName.equals(packageName) || packageName.startsWith(pkgName + ".")) {
 					include = true;
 					break;
-				}
-				//如果候选包名是本次迭代的子包名，则用候选包名被替换
-				if(pkgName.startsWith(packageName + ".")){
+				} else if (pkgName.startsWith(packageName + ".")) { // 如果候选包名是本次迭代的子包名，则用候选包名被替换
 					candidatePackages.set(candidatePackages.indexOf(pkgName), packageName);
 					include = true;
-					break;
 				}
 			}
-			if(!include){
+			if (!include) {
 				candidatePackages.add(packageName);
 			}
 		}
 		
-		/*
-		List<String> allWxClassNameList = new ArrayList<String>();
-		//迭代扫描包里面包含Weixin注解的类
-		Iterator<String> iter = weixinConfig.getPackages().iterator();
-		while(iter.hasNext()){
-			String packageName = iter.next();
-			logger.debug("扫描包路径:" + packageName);
-			PackageScanner scanner = new ClasspathPackageScanner(packageName);
-			try {
-				allWxClassNameList.addAll(scanner.getFullyQualifiedClassNameList());
-			} catch (IOException e) {
-				throw new InitialWeixinConfigureException("扫描包发生异常", e);
-			}	
-		}		
-		//去除重复的类字符串
-		allWxClassNameList = StringUtil.removeDuplicate(allWxClassNameList);
+		List<String> scanPackages = StringUtil.removeDuplicate(candidatePackages);
 
-		List<Class<?>> wxClassList;
-		try {
-			wxClassList = ClasspathPackageScanner.getClassList(allWxClassNameList, new WeixinClassFilter());
-		} catch (ClassNotFoundException e) {
-			throw new InitialWeixinConfigureException("加载微信类发生异常", e);
-		}*/
-		ClasspathPackageScanner scanner = new ClasspathPackageScanner(candidatePackages, Weixin.class);
-		
+		ClasspathPackageScanner scanner = new ClasspathPackageScanner(scanPackages, Weixin.class);
+
 		Set<Class<?>> wxClassList;
 		try {
 			wxClassList = scanner.getClassSet();
 		} catch (ClassNotFoundException | IOException e) {
 			throw new InitialWeixinConfigureException("加载微信类发生异常", e);
 		}
-		
+
 		Iterator<Class<?>> it = wxClassList.iterator();
-		
+
 		while (it.hasNext()) {
 			Class<?> clazz = it.next();
 			logger.debug("解析微信类:" + clazz.getName());
 			parseWeixinClass(clazz);
 		}
-		
-		//迭代处理生成微信上下文消息加密工具WXBizMsgCrypt
+
+		// 迭代处理生成微信上下文消息加密工具WXBizMsgCrypt
 		Iterator<Entry<String, WeixinContext>> iterator = contextMapper.entrySet().iterator();
-		while(iterator.hasNext()){
+		while (iterator.hasNext()) {
 			Entry<String, WeixinContext> entry = iterator.next();
 			WeixinContext context = entry.getValue();
 			String token = context.getToken();
 			String encodingAESKey = context.getEncodingAESKey();
 			String appID = context.getAppID();
-			if(StringUtil.isNull(token) || StringUtil.isNull(encodingAESKey) || StringUtil.isNull(appID)) {
+			if (StringUtil.isNull(token) || StringUtil.isNull(encodingAESKey) || StringUtil.isNull(appID)) {
 				logger.warn("微信上下文(" + entry.getKey() + ")缺少必要的配置信息,不能处理加密的微信消息");
 			} else {
 				context.setPc(new WXBizMsgCrypt(token, encodingAESKey, appID));
 			}
 		}
-		
-		//配置微信消息缓存
+
+		// 配置微信消息缓存
 		messageKeyCache = weixinConfig.getMessageKeyCache();
-		
-		//配置微信方法执行线程池
+
+		// 配置微信方法执行线程池
 		executorService = Executors.newFixedThreadPool(weixinConfig.getThreadPoolSize());
-		
-		//配置微信方法调用超时阀值
+
+		// 配置微信方法调用超时阀值
 		weixinMethodTimeoutThreshold = weixinConfig.getWeixinMethodTimeoutThreshold();
-		
-		//将上下文对象暴露给微信上下文帮助类
+
+		// 将上下文对象暴露给微信上下文帮助类
 		WeixinContextHelper.setContextMapper(contextMapper);
 	}
-	
+
 	/**
 	 * 解析微信类
+	 * 
 	 * @param clazz
-	 * @throws ServletException 
-	 * @throws MultiWeixinEncodingAESKeyException 
-	 * @throws IllegalAccessException 
-	 * @throws InstantiationException 
+	 * @throws ServletException
+	 * @throws MultiWeixinEncodingAESKeyException
+	 * @throws IllegalAccessException
+	 * @throws InstantiationException
 	 */
-	private void parseWeixinClass(Class<?> clazz) throws  ServletException {
+	private void parseWeixinClass(Class<?> clazz) throws ServletException {
 		Weixin wx = clazz.getAnnotation(Weixin.class);
 		String url = wx.value();
-		//获取url对应的微信上下文，如果不存在，就新建一个
+		// 获取url对应的微信上下文，如果不存在，就新建一个
 		WeixinContext context = contextMapper.get(url);
-		if(context == null){
+		if (context == null) {
 			context = new WeixinContext();
 			contextMapper.put(url, context);
 		}
-		
-		//获取微信上下文的url，如果为空，则赋值
-		if(StringUtil.isNull(context.getUrl())){
+
+		// 获取微信上下文的url，如果为空，则赋值
+		if (StringUtil.isNull(context.getUrl())) {
 			context.setUrl(url);
 		}
-		
-		//配置上下文的encodingAESKey值
+
+		// 配置上下文的encodingAESKey值
 		String encodingAESKey = wx.encodingAESKey();
-		if(!StringUtil.isNull(encodingAESKey)){
+		if (!StringUtil.isNull(encodingAESKey)) {
 			WeixinContextConfigHelper.setFieldValue(context, "encodingAESKey", encodingAESKey);
-		}		
-		
-		//token配置
+		}
+
+		// token配置
 		String token = wx.token();
-		if(!StringUtil.isNull(token)){
+		if (!StringUtil.isNull(token)) {
 			WeixinContextConfigHelper.setFieldValue(context, "token", token);
 		}
-		
+
 		// 开发者应用ID配置
 		String appID = wx.appID();
-		if(!StringUtil.isNull(appID)){
+		if (!StringUtil.isNull(appID)) {
 			WeixinContextConfigHelper.setFieldValue(context, "appID", appID);
 		}
-		
+
 		// 开发者应用密钥配置
 		String appSecret = wx.appSecret();
-		if(!StringUtil.isNull(appSecret)){
+		if (!StringUtil.isNull(appSecret)) {
 			WeixinContextConfigHelper.setFieldValue(context, "appSecret", appSecret);
 		}
-		
+
 		Object wxObj;
 		try {
-			//生成微信对象实例
+			// 生成微信对象实例
 			wxObj = clazz.newInstance();
 		} catch (InstantiationException | IllegalAccessException e) {
 			throw new InitialWeixinConfigureException("实例化微信对象异常", e);
 		}
-		
-		//注入spring服务
+
+		// 注入spring服务
 		SpringBeanAutowiringSupport.processInjectionBasedOnServletContext(wxObj, getServletContext());
-		
+
 		Method[] methods = clazz.getDeclaredMethods();
-		//解析微信方法
-		for(Method method : methods){
-			if(WeixinMethod.hasWeixinAnnotationType(method)){
+		// 解析微信方法
+		for (Method method : methods) {
+			if (WeixinMethod.hasWeixinAnnotationType(method)) {
 				logger.debug("解析微信方法:" + method.getName());
 				parseWeixinMethod(context, method, wxObj);
 			}
 		}
 	}
-	
+
 	/**
 	 * 解析微信方法
-	 * @param context 
+	 * 
+	 * @param context
 	 * @param method
 	 * @param wxObj
-	 * @throws ServletException 
+	 * @throws ServletException
 	 */
 	private void parseWeixinMethod(WeixinContext context, Method method, Object wxObj) throws ServletException {
 		WeixinMethod wxMethod = new WeixinMethod();
 		wxMethod.setWxObj(wxObj);
 		wxMethod.setWxMethod(method);
 		Class<?>[] params = method.getParameterTypes();
-		//检查方法参数类型
-		for(Class<?> param : params){
-			if(!wxMethod.isLegalParamType(param)){
+		// 检查方法参数类型
+		for (Class<?> param : params) {
+			if (!wxMethod.isLegalParamType(param)) {
 				throw new InitialWeixinConfigureException(param.getName() + "不是合法的微信方法参数类型");
 			}
 		}
 		wxMethod.setParams(params);
-		
-		//检查返回值类型
+
+		// 检查返回值类型
 		Class<?> returnType = method.getReturnType();
-		if(!wxMethod.isLegalReturnType(returnType)){
+		if (!wxMethod.isLegalReturnType(returnType)) {
 			throw new InitialWeixinConfigureException(returnType.getName() + "不是合法的微信方法返回值类型");
 		}
 		wxMethod.setReturnType(returnType);
-		
-		//处理方法注解信息
+
+		// 处理方法注解信息
 		Annotation[] annos = method.getAnnotations();
-		for(Annotation anno : annos){
+		for (Annotation anno : annos) {
 			Class<? extends Annotation> annotationType = anno.annotationType();
-			if(WeixinMethod.isWeixinAnnotationType(annotationType)){
-				if(WeixinMethod.isExceptionAnnotationType(annotationType)){
-					//异常处理注解构建
-					strategyFactory.getExceptionHandlerStrategy().buildExceptionHandlerMethodMapper(context, wxMethod, anno);
-				} else{
-					//处理注解，获取注解类型的处理策略
+			if (WeixinMethod.isWeixinAnnotationType(annotationType)) {
+				if (WeixinMethod.isExceptionAnnotationType(annotationType)) {
+					// 异常处理注解构建
+					strategyFactory.getExceptionHandlerStrategy().buildExceptionHandlerMethodMapper(context, wxMethod,
+							anno);
+				} else {
+					// 处理注解，获取注解类型的处理策略
 					MsgStrategy strategy = strategyFactory.annotationStrategyCreator(annotationType);
-					//建立消息与微信方法的关联映射
+					// 建立消息与微信方法的关联映射
 					strategy.buildMsgMethodMapper(context, wxMethod, anno);
 				}
 			}
 		}
 	}
-	
+
 	/**
 	 * 微信url签名验证
 	 */
 	@Override
-	protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+	protected void doGet(HttpServletRequest request, HttpServletResponse response)
+			throws ServletException, IOException {
 		PrintWriter out = response.getWriter();
 		WeixinContext context = getWeixinContext(request);
 		String contextUrl = request.getRequestURI().substring(request.getContextPath().length());
-		if(context == null){
+		if (context == null) {
 			logger.error(contextUrl + "没有配置微信上下文");
-		}else if(StringUtil.isNull(context.getToken())){
+		} else if (StringUtil.isNull(context.getToken())) {
 			logger.error("微信上下文" + contextUrl + "没有配置token");
-		}else{
+		} else {
 			// 微信加密签名
 			String signature = request.getParameter("signature");
 			// 时间戳
@@ -376,132 +351,137 @@ public class WeixinDispatcherServlet extends HttpServlet {
 			// 随机字符串
 			String echostr = request.getParameter("echostr");
 			// 通过检验 signature 对请求进行校验， 若校验成功则原样返回 echostr， 表示接入成功，否则接入失败
-			if(SignUtil.checkSignature(context.getToken(), signature, timestamp, nonce)){
+			if (SignUtil.checkSignature(context.getToken(), signature, timestamp, nonce)) {
 				logger.info("微信上下文" + contextUrl + "验证成功");
 				out.print(echostr);
-			}else{
+			} else {
 				logger.warn("微信上下文" + contextUrl + "验证失败");
 			}
 		}
-		if(out!=null){
+		if (out != null) {
 			out.close();
 		}
 	}
-	
+
 	/**
 	 * 获取请求的微信上下文
+	 * 
 	 * @param req
 	 * @return
 	 */
-	private WeixinContext getWeixinContext(HttpServletRequest request){
+	private WeixinContext getWeixinContext(HttpServletRequest request) {
 		String contextUrl = request.getRequestURI().substring(request.getContextPath().length());
 		return contextMapper.get(contextUrl);
 	}
-	
+
 	/**
 	 * 响应微信消息或事件请求
-	 * @throws IOException 
+	 * 
+	 * @throws IOException
 	 */
 	@Override
-	protected void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+	protected void doPost(HttpServletRequest request, HttpServletResponse response)
+			throws ServletException, IOException {
 		// 将请求、响应的编码均设置为 UTF-8（防止中文乱码）
 		request.setCharacterEncoding("UTF-8");
 		response.setCharacterEncoding("UTF-8");
-		
+
 		PrintWriter out = response.getWriter();
-		
-		//获取微信应用的上下文url
+
+		// 获取微信应用的上下文url
 		String contextUrl = request.getRequestURI().substring(request.getContextPath().length());
-		
-		//获取微信上下文
+
+		// 获取微信上下文
 		WeixinContext context = getWeixinContext(request);
-		if(context == null){
+		if (context == null) {
 			logger.error(contextUrl + "没有找到配置的微信上下文对象");
 			out.print("success");
-			if(out!=null){
+			if (out != null) {
 				out.close();
 			}
 		} else {
-			//消息是否加密
+			// 消息是否加密
 			boolean isEncrypted = false;
-			// 微信加密签名 
+			// 微信加密签名
 			String msgSignature = request.getParameter("msg_signature");
 			// 时间戳
 			String timestamp = request.getParameter("timestamp");
 			// 随机数
 			String nonce = request.getParameter("nonce");
-			
-			//获取请求原始xml内容
+
+			// 获取请求原始xml内容
 			String xmlText = getRequestOriginalXml(request);
-			
-			//判断是否为加密消息类型
+
+			// 判断是否为加密消息类型
 			String encryptType = request.getParameter("encrypt_type");
-			if(encryptType!=null && "aes".equals(encryptType)){
+			if (encryptType != null && "aes".equals(encryptType)) {
 				isEncrypted = true;
-				//获取微信上下文WXBizMsgCrypt
+				// 获取微信上下文WXBizMsgCrypt
 				WXBizMsgCrypt pc = context.getPc();
-				//如果WXBizMsgCrypt为空，则抛出异常
-				if(pc == null){
+				// 如果WXBizMsgCrypt为空，则抛出异常
+				if (pc == null) {
 					throw new WeixinInMsgHandleException("微信上下文(" + contextUrl + ")没有找到WXBizMsgCrypt对象,不能处理加密的微信消息");
 				} else {
 					xmlText = pc.decryptMsg(msgSignature, timestamp, nonce, xmlText);
 				}
 			}
-			
-			//System.out.println(xmlText);
-			
-			//生成消息类型
+
+			// System.out.println(xmlText);
+
+			// 生成消息类型
 			InMessage in = null;
 			try {
 				in = inFactory.creator(xmlText);
 			} catch (DocumentException | WeixinInMsgHandleException e) {
-				if(out!=null){
+				if (out != null) {
 					out.close();
 				}
 				throw new WeixinInMsgHandleException("解析微信请求的xml文本发生异常", e);
 			}
-			
-			//生成消息的key值
+
+			// 生成消息的key值
 			String msgKey = contextUrl + "-";
-			if(in instanceof InPlainMessage){
-				InPlainMessage plain = (InPlainMessage)in;
+			if (in instanceof InPlainMessage) {
+				InPlainMessage plain = (InPlainMessage) in;
 				msgKey = msgKey + plain.getMsgId();
-			}else{
+			} else {
 				msgKey = msgKey + in.getFromUserName() + "-" + in.getCreateTime();
 			}
-			
-			//如果缓存中有存在这个key值，说明本次消息是重发的，则不处理这条消息，直接返回
-			if(messageKeyCache.hasMessageKey(msgKey)){
+
+			// 如果缓存中有存在这个key值，说明本次消息是重发的，则不处理这条消息，直接返回
+			if (messageKeyCache.hasMessageKey(msgKey)) {
 				out.print("success");
-				if(out!=null){
+				if (out != null) {
 					out.close();
 				}
 			} else {
-				//获取消息处理策略
+				// 获取消息处理策略
 				MsgStrategy strategy = strategyFactory.inStrategyCreator(in.getClass());
-				//从消息策略中查找微信方法
+				// 从消息策略中查找微信方法
 				WeixinMethod method = strategy.getInMsgWeixinMethod(context, in);
-				if(method == null) {
-					//获取缺省微信处理方法
+				if (method == null) {
+					// 获取缺省微信处理方法
 					method = strategyFactory.getDefaultStrategy().getInMsgWeixinMethod(context, in);
-					if(method == null){
-						logger.warn("微信上下文(" + contextUrl + ")没有找到消息或事件" + in.getClass().getName() + "的处理方法:" + xmlText);
+					if (method == null) {
+						logger.warn(
+								"微信上下文(" + contextUrl + ")没有找到消息或事件" + in.getClass().getName() + "的处理方法:" + xmlText);
 						out.print("success");
-						if(out!=null){
+						if (out != null) {
 							out.close();
 						}
 					}
 				}
-				if(method != null){
-					//调用微信方法
-					invokeWeixinMethod(method, request, response, in, context, out, isEncrypted, timestamp, nonce);					
+				if (method != null) {
+					// 调用微信方法
+					invokeWeixinMethod(method, request, response, in, context, out, isEncrypted, timestamp, nonce);
 				}
 			}
 		}
 	}
-	
+
 	/**
 	 * 调用微信方法处理请求消息或事件
+	 * 
 	 * @param method
 	 * @param request
 	 * @param response
@@ -513,66 +493,70 @@ public class WeixinDispatcherServlet extends HttpServlet {
 	 * @param nonce
 	 * @throws ServletException
 	 */
-	private void invokeWeixinMethod(WeixinMethod method, HttpServletRequest request, HttpServletResponse response, InMessage in, 
-			WeixinContext context, PrintWriter out, boolean isEncrypted, String timestamp, String nonce) throws ServletException {
-		
-		//生成方法执行的参数
+	private void invokeWeixinMethod(WeixinMethod method, HttpServletRequest request, HttpServletResponse response,
+			InMessage in, WeixinContext context, PrintWriter out, boolean isEncrypted, String timestamp, String nonce)
+			throws ServletException {
+
+		// 生成方法执行的参数
 		Class<?>[] params = method.getParams();
 		Object[] args = new Object[params.length];
-		for(int i=0; i<params.length; i++){
-			if(params[i].isInstance(request)){
+		for (int i = 0; i < params.length; i++) {
+			if (params[i].isInstance(request)) {
 				args[i] = request;
-			} else if(params[i].isInstance(response)){
+			} else if (params[i].isInstance(response)) {
 				args[i] = response;
-			} else if(params[i].isInstance(in)){
+			} else if (params[i].isInstance(in)) {
 				args[i] = in;
-			} else if(params[i].isInstance(context)){
+			} else if (params[i].isInstance(context)) {
 				args[i] = context;
 			} else {
 				args[i] = null;
 			}
 		}
-		
-		//生成子线程执行微信方法
+
+		// 生成子线程执行微信方法
 		WeixinMethodInvocationTask task = new WeixinMethodInvocationTask(method.getWxObj(), method.getWxMethod(), args);
 		Future<Object> future = executorService.submit(task);
-		
-		//获取子线程方法执行后的返回对象
+
+		// 获取子线程方法执行后的返回对象
 		Object retObj = null;
 		try {
 			try {
 				retObj = future.get(weixinMethodTimeoutThreshold, TimeUnit.MILLISECONDS);
 				returnRespMsg(retObj, out, in, isEncrypted, context, timestamp, nonce);
 			} catch (InterruptedException e1) {
-				//如果方法执行发生异常
+				// 如果方法执行发生异常
 				throw new InvocationWeixinMethodException("调用微信方法发生中断异常", e1);
 			} catch (ExecutionException e1) {
-				//处理线程执行时异常
-				handleExecutionException(e1, context, request, response, in, out, isEncrypted, timestamp, nonce, "main");
+				// 处理线程执行时异常
+				handleExecutionException(e1, context, request, response, in, out, isEncrypted, timestamp, nonce,
+						"main");
 			}
 		} catch (TimeoutException e) {
-			//如果子线程调度微信方法执行超过了指定的时间阀值，返回空消息
+			// 如果子线程调度微信方法执行超过了指定的时间阀值，返回空消息
 			out.print("success");
-			if(out != null){
+			if (out != null) {
 				out.close();
 			}
 			try {
-				//继续等待子线程执行完毕，获取方法的返回值对象
+				// 继续等待子线程执行完毕，获取方法的返回值对象
 				retObj = future.get();
-				//发送客服消息
+				// 发送客服消息
 				sendCustomMsg(retObj, context, in, method);
 			} catch (InterruptedException e1) {
-				//如果方法执行发生异常
+				// 如果方法执行发生异常
 				throw new InvocationWeixinMethodException("调用微信方法发生中断异常", e1);
 			} catch (ExecutionException e1) {
-				//处理线程执行时异常
-				handleExecutionException(e1, context, request, response, in, out, isEncrypted, timestamp, nonce, "custom");
+				// 处理线程执行时异常
+				handleExecutionException(e1, context, request, response, in, out, isEncrypted, timestamp, nonce,
+						"custom");
 			}
-		}		
+		}
 	}
-	
+
 	/**
 	 * 返回响应消息
+	 * 
 	 * @param retObj
 	 * @param out
 	 * @param in
@@ -583,19 +567,19 @@ public class WeixinDispatcherServlet extends HttpServlet {
 	 * @throws WeixinInMsgHandleException
 	 * @throws AesException
 	 */
-	private void returnRespMsg(Object retObj, PrintWriter out, InMessage in, boolean isEncrypted, WeixinContext context, 
+	private void returnRespMsg(Object retObj, PrintWriter out, InMessage in, boolean isEncrypted, WeixinContext context,
 			String timestamp, String nonce) throws WeixinInMsgHandleException, AesException {
-		if(retObj != null){
-			if(retObj instanceof Success){
+		if (retObj != null) {
+			if (retObj instanceof Success) {
 				out.print(Success.SUCCESS.value());
-			} else{
+			} else {
 				String replyXml = getReplyXml(retObj, in);
-				if(isEncrypted){
+				if (isEncrypted) {
 					replyXml = context.getPc().encryptMsg(replyXml, timestamp, nonce);
 				}
 				out.print(replyXml);
 			}
-			if(out != null){
+			if (out != null) {
 				out.close();
 			}
 		}
@@ -603,6 +587,7 @@ public class WeixinDispatcherServlet extends HttpServlet {
 
 	/**
 	 * 发送客服消息
+	 * 
 	 * @param retObj
 	 * @param context
 	 * @param in
@@ -610,18 +595,21 @@ public class WeixinDispatcherServlet extends HttpServlet {
 	 * @throws NoAccessTokenException
 	 * @throws WeixinInMsgHandleException
 	 */
-	private void sendCustomMsg(Object retObj, WeixinContext context, InMessage in, WeixinMethod method) throws WeixinInMsgHandleException {
-		if(!(retObj instanceof Success)){
-			//通过客服消息将执行结果通知用户
-			String customUrl = WeixinConst.WEIXIN_CUSTOM_MESSAGE_SEND_LINK + "?access_token=" + context.getAccessToken();
+	private void sendCustomMsg(Object retObj, WeixinContext context, InMessage in, WeixinMethod method)
+			throws WeixinInMsgHandleException {
+		if (!(retObj instanceof Success)) {
+			// 通过客服消息将执行结果通知用户
+			String customUrl = WeixinConst.WEIXIN_CUSTOM_MESSAGE_SEND_LINK + "?access_token="
+					+ context.getAccessToken();
 			try {
 				ReturnCode rc = WeixinInterfaceHelper.post(customUrl, getReplyJson(retObj, in), ReturnCode.class);
-				if(!rc.check()){
-					logger.error("客服方法调用失败，无法向客户" + in.getFromUserName() + "返回方法" + method.getWxMethod().getName() + "的执行结果，返回码:" + rc.getErrcode() + ",返回消息:" + rc.getErrmsg());
+				if (!rc.check()) {
+					logger.error("客服方法调用失败，无法向客户" + in.getFromUserName() + "返回方法" + method.getWxMethod().getName()
+							+ "的执行结果，返回码:" + rc.getErrcode() + ",返回消息:" + rc.getErrmsg());
 				}
 			} catch (WeixinInterfaceException e) {
 				Throwable throwable = e.getRootCause();
-				if(throwable!=null){
+				if (throwable != null) {
 					logger.error("执行客服消息发送失败:" + throwable.getMessage());
 				} else {
 					logger.error("执行客服消息发送失败:" + e.getMessage());
@@ -632,77 +620,79 @@ public class WeixinDispatcherServlet extends HttpServlet {
 
 	/**
 	 * 处理微信方法执行时抛出的异常
-	 * @param ex 线程执行异常
-	 * @throws InvocationWeixinMethodException 
+	 * 
+	 * @param ex
+	 *            线程执行异常
+	 * @throws InvocationWeixinMethodException
 	 */
-	private void handleExecutionException(ExecutionException ex, WeixinContext context, HttpServletRequest request, 
-			HttpServletResponse response, InMessage in, PrintWriter out, boolean isEncrypted, String timestamp, 
+	private void handleExecutionException(ExecutionException ex, WeixinContext context, HttpServletRequest request,
+			HttpServletResponse response, InMessage in, PrintWriter out, boolean isEncrypted, String timestamp,
 			String nonce, String phase) throws InvocationWeixinMethodException {
-		//从线程执行异常中获取方法反射执行异常
+		// 从线程执行异常中获取方法反射执行异常
 		Throwable throwable = ex.getCause();
-		
+
 		// 如果线程抛出的不是InvocationTargetException异常，则将该异常直接抛出
-		if(!(throwable instanceof InvocationTargetException)){
-			if(out!=null){
+		if (!(throwable instanceof InvocationTargetException)) {
+			if (out != null) {
 				out.close();
 			}
 			throw new InvocationWeixinMethodException("调用微信方法线程发生异常", throwable);
 		}
-		//获取反射调用异常
+		// 获取反射调用异常
 		InvocationTargetException ite = (InvocationTargetException) throwable;
-		//微信方法抛出的原始异常
+		// 微信方法抛出的原始异常
 		Throwable me = ite.getCause();
-		
-		//从异常处理策略中查找异常处理方法
+
+		// 从异常处理策略中查找异常处理方法
 		WeixinMethod wxMethod = strategyFactory.getExceptionHandlerStrategy().getExceptionHandlerMethod(context, me);
-		//如果没有找到异常处理方法，这将这个方法异常抛出
-		if(wxMethod == null){
-			if(out!=null){
+		// 如果没有找到异常处理方法，这将这个方法异常抛出
+		if (wxMethod == null) {
+			if (out != null) {
 				out.close();
 			}
 			throw new InvocationWeixinMethodException("调用微信方法执行发生异常", me);
 		}
-		
-		//生成异常处理方法执行的参数
+
+		// 生成异常处理方法执行的参数
 		Class<?>[] params = wxMethod.getParams();
 		Object[] args = new Object[params.length];
-		for(int i=0; i<params.length; i++){
-			if(params[i].isInstance(request)){
-				if("custom".equals(phase)){
+		for (int i = 0; i < params.length; i++) {
+			if (params[i].isInstance(request)) {
+				if ("custom".equals(phase)) {
 					args[i] = null;
 				} else {
 					args[i] = request;
 				}
-			} else if(params[i].isInstance(response)){
-				if("custom".equals(phase)){
+			} else if (params[i].isInstance(response)) {
+				if ("custom".equals(phase)) {
 					args[i] = null;
 				} else {
 					args[i] = response;
 				}
-			} else if(params[i].isInstance(in)){
+			} else if (params[i].isInstance(in)) {
 				args[i] = in;
-			} else if(params[i].isInstance(context)){
+			} else if (params[i].isInstance(context)) {
 				args[i] = context;
-			} else if(params[i].isInstance(me)){
+			} else if (params[i].isInstance(me)) {
 				args[i] = me;
 			} else {
 				args[i] = null;
 			}
 		}
-		
-		//执行异常处理方法
+
+		// 执行异常处理方法
 		try {
 			Object obj = wxMethod.getWxMethod().invoke(wxMethod.getWxObj(), args);
-			if("main".equals(phase)){
+			if ("main".equals(phase)) {
 				try {
 					returnRespMsg(obj, out, in, isEncrypted, context, timestamp, nonce);
 				} catch (WeixinInMsgHandleException | AesException e1) {
-					if(out!=null){
+					if (out != null) {
 						out.close();
 					}
 					throw new InvocationWeixinMethodException("返回微信异常响应消息发生异常", e1);
 				}
-			} else if("custom".equals(phase)){
+			} else if ("custom".equals(phase)) {
 				try {
 					sendCustomMsg(obj, context, in, wxMethod);
 				} catch (WeixinInMsgHandleException e1) {
@@ -710,7 +700,7 @@ public class WeixinDispatcherServlet extends HttpServlet {
 				}
 			}
 		} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
-			if(out!=null){
+			if (out != null) {
 				out.close();
 			}
 			throw new InvocationWeixinMethodException("调用微信异常处理方法发生异常", e);
@@ -719,12 +709,14 @@ public class WeixinDispatcherServlet extends HttpServlet {
 
 	/**
 	 * 读取post请求原始xml内容
+	 * 
 	 * @param request
 	 * @return
 	 * @throws IOException
 	 */
-	private String getRequestOriginalXml(HttpServletRequest request) throws IOException{
-		BufferedReader in = new BufferedReader(new InputStreamReader(request.getInputStream(), Charset.forName("UTF-8")));
+	private String getRequestOriginalXml(HttpServletRequest request) throws IOException {
+		BufferedReader in = new BufferedReader(
+				new InputStreamReader(request.getInputStream(), Charset.forName("UTF-8")));
 		StringBuilder sb = new StringBuilder();
 		String line = null;
 		while ((line = in.readLine()) != null) {
@@ -733,58 +725,59 @@ public class WeixinDispatcherServlet extends HttpServlet {
 		}
 		return sb.toString();
 	}
-	
+
 	/**
 	 * 产生微信方法执行返回对象的xml文本
+	 * 
 	 * @param retObj
 	 * @return
-	 * @throws WeixinInMsgHandleException 
+	 * @throws WeixinInMsgHandleException
 	 */
-	private String getReplyXml(Object retObj, InMessage in) throws WeixinInMsgHandleException{
-		if(retObj instanceof OutMessage){
+	private String getReplyXml(Object retObj, InMessage in) throws WeixinInMsgHandleException {
+		if (retObj instanceof OutMessage) {
 			return retObj.toString();
-		} else if(retObj instanceof String){
+		} else if (retObj instanceof String) {
 			String content = (String) retObj;
 			OutMessage textMsg = new OutTextMessage(in, content);
 			return textMsg.toString();
-		} else if(retObj instanceof Text){
+		} else if (retObj instanceof Text) {
 			Text text = (Text) retObj;
 			OutMessage textMsg = new OutTextMessage(in, text);
 			return textMsg.toString();
-		} else if(retObj instanceof Image){
+		} else if (retObj instanceof Image) {
 			Image image = (Image) retObj;
 			OutMessage imageMsg = new OutImageMessage(in, image);
 			return imageMsg.toString();
-		} else if(retObj instanceof Voice){
+		} else if (retObj instanceof Voice) {
 			Voice voice = (Voice) retObj;
 			OutVoiceMessage voiceMsg = new OutVoiceMessage(in, voice);
 			return voiceMsg.toString();
-		} else if(retObj instanceof Video){
+		} else if (retObj instanceof Video) {
 			Video video = (Video) retObj;
 			OutVideoMessage videoMsg = new OutVideoMessage(in, video);
 			return videoMsg.toString();
-		} else if(retObj instanceof Music){
+		} else if (retObj instanceof Music) {
 			Music music = (Music) retObj;
 			OutMusicMessage musicMsg = new OutMusicMessage(in, music);
 			return musicMsg.toString();
-		} else if(retObj instanceof Article){
+		} else if (retObj instanceof Article) {
 			Article article = (Article) retObj;
 			OutArticleMessage articleMsg = new OutArticleMessage(in);
 			articleMsg.getArticles().add(article);
 			return articleMsg.toString();
-		} else if(retObj.getClass().isArray()){
+		} else if (retObj.getClass().isArray()) {
 			Article[] articles = (Article[]) retObj;
 			ArrayList<Article> arrayList = new ArrayList<Article>(Arrays.asList(articles));
 			OutArticleMessage articleMsg = new OutArticleMessage(in);
 			articleMsg.setArticles(arrayList);
 			return articleMsg.toString();
-		} else if(retObj instanceof Collection){
+		} else if (retObj instanceof Collection) {
 			@SuppressWarnings("unchecked")
 			Collection<Article> articles = (Collection<Article>) retObj;
 			OutArticleMessage articleMsg = new OutArticleMessage(in);
 			List<Article> articleList = articleMsg.getArticles();
 			Iterator<Article> iter = articles.iterator();
-			while(iter.hasNext()){
+			while (iter.hasNext()) {
 				Article article = iter.next();
 				articleList.add(article);
 			}
@@ -793,91 +786,92 @@ public class WeixinDispatcherServlet extends HttpServlet {
 			throw new WeixinInMsgHandleException("无法识别的返回值对象");
 		}
 	}
-	
+
 	/**
 	 * 产生微信客服接口发送消息对象
+	 * 
 	 * @param retObj
 	 * @param in
 	 * @return
-	 * @throws WeixinInMsgHandleException 
+	 * @throws WeixinInMsgHandleException
 	 */
-	private CustomMessage getReplyJson(Object retObj, InMessage in) throws WeixinInMsgHandleException{
-		if(retObj instanceof String){
+	private CustomMessage getReplyJson(Object retObj, InMessage in) throws WeixinInMsgHandleException {
+		if (retObj instanceof String) {
 			String content = (String) retObj;
 			CustomTextMessage textMsg = new CustomTextMessage(in, content);
 			return textMsg;
-		} else if(retObj instanceof Text){
+		} else if (retObj instanceof Text) {
 			Text text = (Text) retObj;
 			CustomTextMessage textMsg = new CustomTextMessage(in, text);
 			return textMsg;
-		} else if(retObj instanceof OutTextMessage){
+		} else if (retObj instanceof OutTextMessage) {
 			OutTextMessage text = (OutTextMessage) retObj;
 			CustomTextMessage textMsg = new CustomTextMessage(in, text.getText());
 			return textMsg;
-		} else if(retObj instanceof Image){
+		} else if (retObj instanceof Image) {
 			Image image = (Image) retObj;
 			CustomImageMessage imageMsg = new CustomImageMessage(in, image);
 			return imageMsg;
-		} else if(retObj instanceof OutImageMessage){
+		} else if (retObj instanceof OutImageMessage) {
 			OutImageMessage outImage = (OutImageMessage) retObj;
 			CustomImageMessage imageMsg = new CustomImageMessage(in, outImage.getImage());
 			return imageMsg;
-		} else if(retObj instanceof Voice){
+		} else if (retObj instanceof Voice) {
 			Voice voice = (Voice) retObj;
 			CustomVoiceMessage voiceMsg = new CustomVoiceMessage(in, voice);
 			return voiceMsg;
-		} else if(retObj instanceof OutVoiceMessage){
+		} else if (retObj instanceof OutVoiceMessage) {
 			OutVoiceMessage outVoice = (OutVoiceMessage) retObj;
 			CustomVoiceMessage voiceMsg = new CustomVoiceMessage(in, outVoice.getVoice());
 			return voiceMsg;
-		} else if(retObj instanceof Video){
+		} else if (retObj instanceof Video) {
 			Video video = (Video) retObj;
 			CustomVideoMessage videoMsg = new CustomVideoMessage(in, video);
 			return videoMsg;
-		} else if(retObj instanceof OutVideoMessage){
+		} else if (retObj instanceof OutVideoMessage) {
 			OutVideoMessage outVideo = (OutVideoMessage) retObj;
 			CustomVideoMessage videoMsg = new CustomVideoMessage(in, outVideo.getVideo());
 			return videoMsg;
-		} else if(retObj instanceof Music){
+		} else if (retObj instanceof Music) {
 			Music music = (Music) retObj;
 			CustomMusicMessage musicMsg = new CustomMusicMessage(in, music);
 			return musicMsg;
-		} else if(retObj instanceof OutMusicMessage){
+		} else if (retObj instanceof OutMusicMessage) {
 			OutMusicMessage outMusic = (OutMusicMessage) retObj;
 			CustomMusicMessage musicMsg = new CustomMusicMessage(in, outMusic.getMusic());
 			return musicMsg;
-		} else if(retObj instanceof Article){
+		} else if (retObj instanceof Article) {
 			Article article = (Article) retObj;
 			List<Article> articles = new ArrayList<Article>();
 			articles.add(article);
 			CustomNewsMessage newsMsg = new CustomNewsMessage(in, articles);
 			return newsMsg;
-		} else if(retObj instanceof OutArticleMessage){
+		} else if (retObj instanceof OutArticleMessage) {
 			OutArticleMessage outArticle = (OutArticleMessage) retObj;
 			List<Article> articles = outArticle.getArticles();
-			if(articles!=null && articles.size()>8){
+			if (articles != null && articles.size() > 8) {
 				articles = articles.subList(0, 8);
 			}
 			CustomNewsMessage newsMsg = new CustomNewsMessage(in, articles);
 			return newsMsg;
-		} else if(retObj.getClass().isArray()){
+		} else if (retObj.getClass().isArray()) {
 			Article[] articles = (Article[]) retObj;
 			List<Article> articleList = new ArrayList<Article>(Arrays.asList(articles));
-			if(articleList!=null && articleList.size()>8){
+			if (articleList != null && articleList.size() > 8) {
 				articleList = articleList.subList(0, 8);
 			}
 			CustomNewsMessage newsMsg = new CustomNewsMessage(in, articleList);
 			return newsMsg;
-		} else if(retObj instanceof Collection){
+		} else if (retObj instanceof Collection) {
 			@SuppressWarnings("unchecked")
 			Collection<Article> articles = (Collection<Article>) retObj;
 			List<Article> articleList = new ArrayList<Article>();
 			Iterator<Article> iter = articles.iterator();
-			while(iter.hasNext()){
+			while (iter.hasNext()) {
 				Article article = iter.next();
 				articleList.add(article);
 			}
-			if(articleList!=null && articleList.size()>8){
+			if (articleList != null && articleList.size() > 8) {
 				articleList = articleList.subList(0, 8);
 			}
 			CustomNewsMessage newsMsg = new CustomNewsMessage(in, articleList);
@@ -886,11 +880,11 @@ public class WeixinDispatcherServlet extends HttpServlet {
 			throw new WeixinInMsgHandleException("无法识别的返回值对象");
 		}
 	}
-	
+
 	@Override
 	public void destroy() {
 		super.destroy();
-		//关闭线程池
+		// 关闭线程池
 		executorService.shutdown();
 	}
 
