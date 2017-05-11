@@ -16,6 +16,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -37,7 +38,6 @@ import org.springframework.web.context.support.WebApplicationContextUtils;
 
 import com.github.jweixin.jwx.aes.AesException;
 import com.github.jweixin.jwx.aes.WXBizMsgCrypt;
-import com.github.jweixin.jwx.config.WeixinClassFilter;
 import com.github.jweixin.jwx.config.WeixinConfigurer;
 import com.github.jweixin.jwx.config.WeixinConst;
 import com.github.jweixin.jwx.context.InitialWeixinConfigureException;
@@ -77,8 +77,7 @@ import com.github.jweixin.jwx.message.response.Voice;
 import com.github.jweixin.jwx.message.strategy.MsgStrategy;
 import com.github.jweixin.jwx.message.strategy.MsgStrategyFactory;
 import com.github.jweixin.jwx.sign.SignUtil;
-import com.github.jweixin.jwx.util.ClasspathPackageScanner;
-import com.github.jweixin.jwx.util.PackageScanner;
+import com.github.jweixin.jwx.util.PackageAnnotationClassScanner;
 import com.github.jweixin.jwx.util.StringUtil;
 import com.github.jweixin.jwx.util.WeixinInterfaceException;
 import com.github.jweixin.jwx.util.WeixinInterfaceHelper;
@@ -94,6 +93,7 @@ import com.github.jweixin.jwx.weixin.entity.ReturnCode;
  * 2017-2-27 增加缺省消息或事件处理
  * 2017-3-2 增加方法调用异常处理
  * 2017-3-9 增加线程池执行微信方法部分
+ * 2017-5-11 修改包扫描获取微信注解类部分
  */
 public class WeixinDispatcherServlet extends HttpServlet {
 	
@@ -145,6 +145,35 @@ public class WeixinDispatcherServlet extends HttpServlet {
 			throw new InitialWeixinConfigureException("spring配置文件中缺少微信包扫描配置");
 		}
 		
+		//去除重复的包名和子包名
+		List<String> packageNames = weixinConfig.getPackages();
+		List<String> candidatePackages = new ArrayList<String>();
+		
+		Iterator<String> iter = packageNames.iterator();
+		while(iter.hasNext()){
+			String packageName = iter.next().trim();
+			boolean include = false;
+			Iterator<String> it = candidatePackages.iterator();
+			while(it.hasNext()){
+				String pkgName = it.next();
+				//如果候选包名等于本次迭代的包名，则跳过
+				if(pkgName.equals(packageName)){
+					include = true;
+					break;
+				}
+				//如果候选包名是本次迭代的子包名，则用候选包名被替换
+				if(pkgName.startsWith(packageName + ".")){
+					candidatePackages.set(candidatePackages.indexOf(pkgName), packageName);
+					include = true;
+					break;
+				}
+			}
+			if(!include){
+				candidatePackages.add(packageName);
+			}
+		}
+		
+		/*
 		List<String> allWxClassNameList = new ArrayList<String>();
 		//迭代扫描包里面包含Weixin注解的类
 		Iterator<String> iter = weixinConfig.getPackages().iterator();
@@ -166,9 +195,18 @@ public class WeixinDispatcherServlet extends HttpServlet {
 			wxClassList = ClasspathPackageScanner.getClassList(allWxClassNameList, new WeixinClassFilter());
 		} catch (ClassNotFoundException e) {
 			throw new InitialWeixinConfigureException("加载微信类发生异常", e);
+		}*/
+		PackageAnnotationClassScanner scanner = new PackageAnnotationClassScanner(candidatePackages, Weixin.class);
+		
+		Set<Class<?>> wxClassList;
+		try {
+			wxClassList = scanner.getClassSet();
+		} catch (ClassNotFoundException | IOException e) {
+			throw new InitialWeixinConfigureException("加载微信类发生异常", e);
 		}
 		
 		Iterator<Class<?>> it = wxClassList.iterator();
+		
 		while (it.hasNext()) {
 			Class<?> clazz = it.next();
 			logger.debug("解析微信类:" + clazz.getName());

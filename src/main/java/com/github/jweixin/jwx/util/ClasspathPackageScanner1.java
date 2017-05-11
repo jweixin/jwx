@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.jar.JarEntry;
 import java.util.jar.JarInputStream;
 
-import com.github.jweixin.jwx.util.ClassFilter;
+import com.github.jweixin.jwx.util.ClassFilter1;
 
 /**
  * 包扫描器
@@ -20,7 +20,7 @@ import com.github.jweixin.jwx.util.ClassFilter;
  * @author zzx
  * @version 1.0 2017-01-11
  */
-public class ClasspathPackageScanner implements PackageScanner {
+public class ClasspathPackageScanner1 implements PackageScanner1 {
 	private String basePackage;
 	private ClassLoader cl;
 
@@ -30,7 +30,7 @@ public class ClasspathPackageScanner implements PackageScanner {
 	 * @param basePackage
 	 *            The base package to scan.
 	 */
-	public ClasspathPackageScanner(String basePackage) {
+	public ClasspathPackageScanner1(String basePackage) {
 		this.basePackage = basePackage;
 		this.cl = getClass().getClassLoader();
 	}
@@ -43,7 +43,7 @@ public class ClasspathPackageScanner implements PackageScanner {
 	 * @param cl
 	 *            Use this class load to locate the package.
 	 */
-	public ClasspathPackageScanner(String basePackage, ClassLoader cl) {
+	public ClasspathPackageScanner1(String basePackage, ClassLoader cl) {
 		this.basePackage = basePackage;
 		this.cl = cl;
 	}
@@ -74,7 +74,7 @@ public class ClasspathPackageScanner implements PackageScanner {
 	 * @return 包类列表
 	 */
 	@Override
-	public List<Class<?>> getPackageClassList(ClassFilter classFilter) throws IOException, ClassNotFoundException {
+	public List<Class<?>> getPackageClassList(ClassFilter1 classFilter) throws IOException, ClassNotFoundException {
 		List<Class<?>> classList = new ArrayList<Class<?>>();
 		Iterator<String> iter = getFullyQualifiedClassNameList().iterator();
 		while (iter.hasNext()) {
@@ -93,11 +93,11 @@ public class ClasspathPackageScanner implements PackageScanner {
 	 * @return
 	 * @throws ClassNotFoundException
 	 */
-	public static List<Class<?>> getClassList(List<String> classNameList, ClassFilter classFilter) throws ClassNotFoundException{
+	public static List<Class<?>> getClassList(List<String> classNameList, ClassFilter1 classFilter) throws ClassNotFoundException{
 		List<Class<?>> classList = new ArrayList<Class<?>>();
 		Iterator<String> iter = classNameList.iterator();
 		while (iter.hasNext()) {
-			Class<?> clazz = Class.forName(iter.next(), Boolean.FALSE, ClasspathPackageScanner.class.getClassLoader());
+			Class<?> clazz = Class.forName(iter.next(), Boolean.FALSE, ClasspathPackageScanner1.class.getClassLoader());
 			if (classFilter == null || (classFilter != null && classFilter.accept(clazz))) {
 				classList.add(clazz);
 			}

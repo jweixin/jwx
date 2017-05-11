@@ -1,5 +1,5 @@
 package com.github.jweixin.jwx.util;
 
-public interface ClassFilter {
+public interface ClassFilter1 {
 	boolean accept(Class<?> clazz);
 }

@@ -8,7 +8,7 @@ import java.lang.reflect.Method;
  * @author zzx
  * @version 1.0 2017-1-11
  */
-public class ClassUtil {
+public class ClassUtil1 {
 	/**
 	 * 判断类是否已经加载
 	 * @param name
