@@ -25,7 +25,7 @@ import org.springframework.util.ClassUtils;
  * @version 1.0
  * 2017.5.11
  */
-public class PackageAnnotationClassScanner {
+public class ClasspathPackageScanner {
 
 	private static final String RESOURCE_PATTERN = "/**/*.class";
 
@@ -46,7 +46,7 @@ public class PackageAnnotationClassScanner {
 	 *            指定扫描包中含有特定注解标记的bean,支持多个注解
 	 */
 	@SafeVarargs
-	public PackageAnnotationClassScanner(List<String> packagesToScan, Class<? extends Annotation>... annotationFilter) {
+	public ClasspathPackageScanner(List<String> packagesToScan, Class<? extends Annotation>... annotationFilter) {
 		if (packagesToScan != null) {
 			Iterator<String> iter = packagesToScan.iterator();
 			while (iter.hasNext()) {

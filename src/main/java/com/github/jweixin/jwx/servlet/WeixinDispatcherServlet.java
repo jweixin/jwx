@@ -77,7 +77,7 @@ import com.github.jweixin.jwx.message.response.Voice;
 import com.github.jweixin.jwx.message.strategy.MsgStrategy;
 import com.github.jweixin.jwx.message.strategy.MsgStrategyFactory;
 import com.github.jweixin.jwx.sign.SignUtil;
-import com.github.jweixin.jwx.util.PackageAnnotationClassScanner;
+import com.github.jweixin.jwx.util.ClasspathPackageScanner;
 import com.github.jweixin.jwx.util.StringUtil;
 import com.github.jweixin.jwx.util.WeixinInterfaceException;
 import com.github.jweixin.jwx.util.WeixinInterfaceHelper;
@@ -196,7 +196,7 @@ public class WeixinDispatcherServlet extends HttpServlet {
 		} catch (ClassNotFoundException e) {
 			throw new InitialWeixinConfigureException("加载微信类发生异常", e);
 		}*/
-		PackageAnnotationClassScanner scanner = new PackageAnnotationClassScanner(candidatePackages, Weixin.class);
+		ClasspathPackageScanner scanner = new ClasspathPackageScanner(candidatePackages, Weixin.class);
 		
 		Set<Class<?>> wxClassList;
 		try {
