@@ -41,17 +41,13 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonSyntaxException;
 
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.Response;
-
 /**
  * 微信接口工具类
  * 封装了通过http协议获取微信服务的结果
  * @author Administrator
  *
  */
-public class WeixinInterfaceHelper {
+public class WeixinInterfaceHelper2 {
 
 	/**
 	 * 设置json命名策略，java对象域驼峰格式，json字符串是小写下划线格式
@@ -61,12 +57,6 @@ public class WeixinInterfaceHelper {
 			.registerTypeAdapter(Button.class, new ButtonAdapter())
 			.registerTypeAdapter(AbstractMenu.class, new AbstractMenuAdapter())
 			.create();
-	
-	/**
-	 * OkHttpClient客户端对象，代表发送http请求的客户端
-	 */
-	private static OkHttpClient client = new OkHttpClient.Builder()
-			.build();
 	
 	/**
 	 * 缓存大小
@@ -80,32 +70,52 @@ public class WeixinInterfaceHelper {
 	 * @return
 	 */
 	public static <T> T get(String url, Class<T> classOfT) {
-		Request request = new Request.Builder()
-				.url(url)
-				.addHeader("Accept", "application/json")
-				.build();
+		CloseableHttpClient httpClient = HttpClients.createDefault();
+		HttpGet get = new HttpGet(url);
+		get.addHeader("Content-Type", "application/json; charset=utf-8");
+		get.setHeader("Accept", "application/json");
 		
-		Response response = null;
+		CloseableHttpResponse response = null;
 		try {
-			response = client.newCall(request).execute();
-			if(response.isSuccessful()){
-				String jsonStr = response.body().string();
-				// 如果返回值类型不是ReturnCode及其子类
-				if (!ReturnCode.class.isAssignableFrom(classOfT)) {
-					checkErrCode(jsonStr, "执行链接[" + url + "]的GET请求返回微信错误码");
-				}
-				return gson.fromJson(jsonStr, classOfT);
-			} else {
+			response = httpClient.execute(get);
+			
+			StatusLine sl = response.getStatusLine();
+			int statusCode = sl.getStatusCode();
+			if (statusCode != HttpStatus.SC_OK) {
 				HttpReturnStatus status = new HttpReturnStatus();
-				status.setStatusCode(response.code());
-				status.setReasonPhrase(response.message());
+				status.setStatusCode(statusCode);
+				status.setReasonPhrase(sl.getReasonPhrase());
 				throw new IncorrectHttpStatusCodeException("执行链接[" + url + "]的GET请求发生异常", status);
+			}		
+			
+			String jsonStr = null;
+			try {
+				jsonStr = IOUtils.toString(response.getEntity().getContent(), Charset.forName("UTF-8"));
+			} catch (UnsupportedOperationException | IOException e) {
+				throw new HttpAccessFailureException("获取链接[" + url + "]的GET请求结果发生异常", e);
 			}
+			// 如果返回值类型不是ReturnCode及其子类
+			if (!ReturnCode.class.isAssignableFrom(classOfT)) {
+				checkErrCode(jsonStr, "执行链接[" + url + "]的GET请求返回微信错误码");
+			}
+			
+			return gson.fromJson(jsonStr, classOfT);
 		} catch (IOException e) {
 			throw new HttpAccessFailureException("执行链接[" + url + "]的GET请求发生异常", e);
 		} finally {
-			if(response != null){
-				response.close();
+			if (response != null) {
+				try {
+					response.close();
+				} catch (IOException e) {
+					throw new CloseableResourceFailureException("关闭http的GET请求响应失败", e);
+				}
+			}
+			if (httpClient != null) {
+				try {
+					httpClient.close();
+				} catch (IOException e) {
+					throw new CloseableResourceFailureException("关闭httpClient对象失败", e);
+				}
 			}
 		}
 	}
