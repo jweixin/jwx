@@ -41,8 +41,10 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonSyntaxException;
 
+import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
+import okhttp3.RequestBody;
 import okhttp3.Response;
 
 /**
@@ -67,6 +69,12 @@ public class WeixinInterfaceHelper {
 	 */
 	private static OkHttpClient client = new OkHttpClient.Builder()
 			.build();
+	
+	/**
+	 * JSON媒体介质类型
+	 */
+	public static final MediaType MEDIA_TYPE_JSON
+	  = MediaType.parse("application/json; encoding=utf-8");
 	
 	/**
 	 * 缓存大小
@@ -139,53 +147,33 @@ public class WeixinInterfaceHelper {
 	 * @return
 	 */
 	public static <T> T post(String url, Object jsonObj, Class<T> classOfT) {
-		CloseableHttpClient httpClient = HttpClients.createDefault();
-		HttpPost post = new HttpPost(url);
-		post.addHeader("Content-Type", "application/json; charset=utf-8");
-		post.setHeader("Accept", "application/json");
-		post.setEntity(new StringEntity(gson.toJson(jsonObj), Charset.forName("UTF-8")));
+		Request request = new Request.Builder()
+				.url(url)
+				.addHeader("Accept", "application/json")
+				.post(RequestBody.create(MEDIA_TYPE_JSON, gson.toJson(jsonObj)))
+				.build();
 		
-		CloseableHttpResponse response = null;
+		Response response = null;
 		try {
-			response = httpClient.execute(post);
-			
-			StatusLine sl = response.getStatusLine();
-			int statusCode = sl.getStatusCode();
-			if (statusCode != HttpStatus.SC_OK) {
+			response = client.newCall(request).execute();
+			if(response.isSuccessful()){
+				String jsonStr = response.body().string();
+				// 如果返回值类型不是ReturnCode及其子类
+				if (!ReturnCode.class.isAssignableFrom(classOfT)) {
+					checkErrCode(jsonStr, "执行链接[" + url + "]的POST请求返回微信错误码");
+				}
+				return gson.fromJson(jsonStr, classOfT);
+			} else {
 				HttpReturnStatus status = new HttpReturnStatus();
-				status.setStatusCode(statusCode);
-				status.setReasonPhrase(sl.getReasonPhrase());
+				status.setStatusCode(response.code());
+				status.setReasonPhrase(response.message());
 				throw new IncorrectHttpStatusCodeException("执行链接[" + url + "]的POST请求发生异常", status);
-			}		
-			
-			String jsonStr = null;
-			try {
-				jsonStr = IOUtils.toString(response.getEntity().getContent(), Charset.forName("UTF-8"));
-			} catch (UnsupportedOperationException | IOException e) {
-				throw new HttpAccessFailureException("获取链接[" + url + "]的POST请求结果发生异常", e);
 			}
-			// 如果返回值类型不是ReturnCode及其子类
-			if (!ReturnCode.class.isAssignableFrom(classOfT)) {
-				checkErrCode(jsonStr, "执行链接[" + url + "]的POST请求返回微信错误码");
-			}
-			
-			return gson.fromJson(jsonStr, classOfT);
 		} catch (IOException e) {
 			throw new HttpAccessFailureException("执行链接[" + url + "]的POST请求发生异常", e);
 		} finally {
-			if (response != null) {
-				try {
-					response.close();
-				} catch (IOException e) {
-					throw new CloseableResourceFailureException("关闭http的POST请求响应失败", e);
-				}
-			}
-			if (httpClient != null) {
-				try {
-					httpClient.close();
-				} catch (IOException e) {
-					throw new CloseableResourceFailureException("关闭httpClient对象失败", e);
-				}
+			if(response != null){
+				response.close();
 			}
 		}
 	}

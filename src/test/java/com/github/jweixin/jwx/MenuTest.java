@@ -1,7 +1,40 @@
 package com.github.jweixin.jwx;
 
+import org.junit.Assert;
+import org.junit.Test;
+
+import com.github.jweixin.jwx.config.WeixinConst;
+import com.github.jweixin.jwx.util.WeixinInterfaceException;
+import com.github.jweixin.jwx.util.WeixinInterfaceHelper;
+import com.github.jweixin.jwx.weixin.entity.AccessToken;
+import com.github.jweixin.jwx.weixin.entity.ReturnCode;
+import com.github.jweixin.jwx.weixin.entity.menu.AbstractButton;
+import com.github.jweixin.jwx.weixin.entity.menu.AbstractButtonAdapter;
+import com.github.jweixin.jwx.weixin.entity.menu.AbstractMenu;
+import com.github.jweixin.jwx.weixin.entity.menu.AbstractMenuAdapter;
+import com.github.jweixin.jwx.weixin.entity.menu.Button;
+import com.github.jweixin.jwx.weixin.entity.menu.ButtonAdapter;
+import com.github.jweixin.jwx.weixin.entity.menu.ClickButton;
+import com.github.jweixin.jwx.weixin.entity.menu.ConditionalMenu;
+import com.github.jweixin.jwx.weixin.entity.menu.LocationSelectButton;
+import com.github.jweixin.jwx.weixin.entity.menu.MatchRule;
+import com.github.jweixin.jwx.weixin.entity.menu.Menu;
+import com.github.jweixin.jwx.weixin.entity.menu.MenuGroup;
+import com.github.jweixin.jwx.weixin.entity.menu.MenuLabel;
+import com.github.jweixin.jwx.weixin.entity.menu.PicPhotoOrAlbumButton;
+import com.github.jweixin.jwx.weixin.entity.menu.PicSysphotoButton;
+import com.github.jweixin.jwx.weixin.entity.menu.PicWeixinButton;
+import com.github.jweixin.jwx.weixin.entity.menu.ScancodePushButton;
+import com.github.jweixin.jwx.weixin.entity.menu.ScancodeWaitmsgButton;
+import com.github.jweixin.jwx.weixin.entity.menu.SubMenu;
+import com.github.jweixin.jwx.weixin.entity.menu.ViewButton;
+import com.github.jweixin.jwx.weixin.service.MenuService;
+import com.google.gson.FieldNamingPolicy;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+
 public class MenuTest {
-	/*
+	
 	private MenuService menuService = new MenuService();
 
 	private static Gson gson = new GsonBuilder().setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
@@ -10,8 +43,8 @@ public class MenuTest {
 			.registerTypeAdapter(AbstractMenu.class, new AbstractMenuAdapter()).create();
 
 	private String getAccessToken() {
-		String appID = "wx7710f3ee377d59de";
-		String appSecret = "2f0303d4c88211c8b376601ce4ef32f9";
+		String appID = "wxe2f578fc6340979d";
+		String appSecret = "5697cf4b123083507a04518b1f0e2e45";
 		String url = WeixinConst.WEIXIN_ACCESS_TOKEN_LINK + "&appid=" + appID + "&secret=" + appSecret;
 		AccessToken at = null;
 		try {
@@ -118,7 +151,8 @@ public class MenuTest {
 		b4.setKey("V1001_GOOD");
 		sm.getSubButton().add(b4);
 		menu.getButton().add(sm);
-		System.out.println(menuService.createMenu(getAccessToken(), menu));
+		ReturnCode rc = menuService.createMenu(getAccessToken(), menu);
+		System.out.println(rc.getErrcode()+rc.getErrmsg());
 	}
 	
 	@Test
@@ -180,6 +214,6 @@ public class MenuTest {
 	public void testMatch(){
 		Menu menu = menuService.match(getAccessToken(), "obfFfv70_Ei4P9a8wuE-lUH0fds4");
 		System.out.println(gson.toJson(menu));
-	}*/
+	}
 
 }
