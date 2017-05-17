@@ -172,6 +172,7 @@ public class WeixinInterfaceHelper {
 
 	/**
 	 * 上传文件，返回的json字符串对应的类型对象
+	 * 
 	 * @param url
 	 * @param file
 	 * @param mediaFieldName
@@ -294,19 +295,19 @@ public class WeixinInterfaceHelper {
 	 * @return
 	 */
 	public static BytesFile download(String url, Object jsonObj) {
-		Request request = new Request.Builder().url(url)
-				.post(RequestBody.create(MEDIA_TYPE_JSON, gson.toJson(jsonObj))).build();
-		
+		Request request = new Request.Builder().url(url).post(RequestBody.create(MEDIA_TYPE_JSON, gson.toJson(jsonObj)))
+				.build();
+
 		Response response = null;
 		try {
 			response = client.newCall(request).execute();
 			if (response.isSuccessful()) {
 				BytesFile bf = new BytesFile();
 				String header = response.header("Content-Disposition");
-				
+
 				bf.setFilename(getFilename(header));
 				bf.setBytes(response.body().bytes());
-				
+
 				return bf;
 			} else {
 				HttpReturnStatus status = new HttpReturnStatus();
@@ -330,21 +331,18 @@ public class WeixinInterfaceHelper {
 	 * @return
 	 */
 	public static BytesFile download(String url) {
-		Request request = new Request.Builder()
-	            .get()
-	            .url(url)
-	            .build();
-		
+		Request request = new Request.Builder().get().url(url).build();
+
 		Response response = null;
 		try {
 			response = client.newCall(request).execute();
 			if (response.isSuccessful()) {
 				BytesFile bf = new BytesFile();
 				String header = response.header("Content-Disposition");
-				
+
 				bf.setFilename(getFilename(header));
 				bf.setBytes(response.body().bytes());
-				
+
 				return bf;
 			} else {
 				HttpReturnStatus status = new HttpReturnStatus();
@@ -444,28 +442,28 @@ public class WeixinInterfaceHelper {
 	 * @param response
 	 * @return
 	 */
-	private static String getFilename(String headerContent) {
-		/*
-		Header contentHeader = new BasicHeader("Content-Disposition", headerContent);
-		String filename = null;
-		if (contentHeader != null) {
-			HeaderElement[] values = contentHeader.getElements();
-			if (values.length == 1) {
-				NameValuePair param = values[0].getParameterByName("filename");
-				if (param != null) {
-					try {
-						// filename = new
-						// String(param.getValue().toString().getBytes(),
-						// "utf-8");
-						// filename=URLDecoder.decode(param.getValue(),"utf-8");
-						filename = param.getValue();
-					} catch (Exception e) {
-						return null;
-					}
+	private static String getFilename(String headerValue) {
+		if (StringUtil.isNull(headerValue)) {
+			return null;
+		}
+
+		String[] elements = headerValue.split(";");
+
+		for (String element : elements) {
+			if (!StringUtil.isNull(element)) {
+				String[] parameters = element.split("=");
+				if (parameters.length >= 2 && "filename".equalsIgnoreCase(parameters[0].trim())) {
+					String filename = parameters[1].trim();
+					
+					// 去除首尾的双引号
+					filename = filename.indexOf("\"") == 0 ? filename.substring(1, filename.length()) : filename;
+					filename = filename.lastIndexOf("\"") == (filename.length() - 1) ? filename.substring(0, filename.length() - 1) : filename;
+
+					return filename.trim();
 				}
 			}
-		}*/
-		String filename = headerContent;
-		return filename;
+		}
+
+		return null;
 	}
 }
