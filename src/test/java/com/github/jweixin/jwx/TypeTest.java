@@ -1,6 +1,5 @@
 package com.github.jweixin.jwx;
 
-import org.apache.http.entity.ContentType;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -15,12 +14,6 @@ public class TypeTest {
 		if(clazz.isArray()){
 			Assert.assertTrue(Article.class.isAssignableFrom(clazz.getComponentType()));
 		}
-	}
-	
-	@Test
-	public void testHttpJsonType(){
-		String mime = "application/json";
-		Assert.assertEquals(mime, ContentType.APPLICATION_JSON.getMimeType());
 	}
 
 }

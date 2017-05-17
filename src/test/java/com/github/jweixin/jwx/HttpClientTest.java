@@ -1,6 +1,5 @@
 package com.github.jweixin.jwx;
 
-import org.apache.http.HttpStatus;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -10,11 +9,6 @@ import com.github.jweixin.jwx.weixin.entity.AccessToken;
 
 
 public class HttpClientTest {
-	
-	@Test
-	public void testStatus(){
-		Assert.assertEquals(HttpStatus.SC_OK, 200);
-	}
 	
 	@Test
 	public void testGetAccessToken() {
