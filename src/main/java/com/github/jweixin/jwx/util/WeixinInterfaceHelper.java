@@ -15,11 +15,11 @@ import org.apache.http.HeaderElement;
 import org.apache.http.HttpEntity;
 import org.apache.http.NameValuePair;
 import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
+import org.apache.http.message.BasicHeader;
 
 import com.github.jweixin.jwx.weixin.entity.BytesFile;
 import com.github.jweixin.jwx.weixin.entity.ReturnCode;
@@ -307,6 +307,8 @@ public class WeixinInterfaceHelper {
 	 * @return
 	 */
 	public static BytesFile download(String url, Object jsonObj) {
+		
+		
 		CloseableHttpClient httpClient = HttpClients.createDefault();
 		HttpPost post = new HttpPost(url);
 		post.addHeader("Content-Type", "application/json; charset=utf-8");
@@ -389,88 +391,39 @@ public class WeixinInterfaceHelper {
 	}
 
 	/**
-	 * get请求，返回字节数组
+	 * get请求，返回字节文件
 	 * 
 	 * @param url
 	 * @return
 	 */
 	public static BytesFile download(String url) {
-		CloseableHttpClient httpClient = HttpClients.createDefault();
-		HttpGet get = new HttpGet(url);
-		get.addHeader("Content-Type", "application/json; charset=utf-8");
-
-		CloseableHttpResponse response = null;
-		InputStream in = null;
-		ByteArrayOutputStream outStream = null;
+		Request request = new Request.Builder()
+	            .get()
+	            .url(url)
+	            .build();
+		
+		Response response = null;
 		try {
-			response = httpClient.execute(get);
-			HttpEntity entity = response.getEntity();
-			if (entity == null) {
-				return null;
+			response = client.newCall(request).execute();
+			if (response.isSuccessful()) {
+				BytesFile bf = new BytesFile();
+				String header = response.header("Content-Disposition");
+				
+				bf.setFilename(getFilename(header));
+				bf.setBytes(response.body().bytes());
+				
+				return bf;
+			} else {
+				HttpReturnStatus status = new HttpReturnStatus();
+				status.setStatusCode(response.code());
+				status.setReasonPhrase(response.message());
+				throw new IncorrectHttpStatusCodeException("执行文件下载链接[" + url + "]的GET请求发生异常", status);
 			}
-
-			BytesFile bf = new BytesFile();
-			Header contentHeader = response.getFirstHeader("Content-Disposition");
-			String filename = null;
-			if (contentHeader != null) {
-				HeaderElement[] values = contentHeader.getElements();
-				if (values.length == 1) {
-					NameValuePair param = values[0].getParameterByName("filename");
-					if (param != null) {
-						try {
-							// filename = new
-							// String(param.getValue().toString().getBytes(),
-							// "utf-8");
-							// filename=URLDecoder.decode(param.getValue(),"utf-8");
-							filename = param.getValue();
-							bf.setFilename(filename);
-						} catch (Exception e) {
-							bf.setFilename(null);
-						}
-					}
-				}
-			}
-
-			in = entity.getContent();
-			outStream = new ByteArrayOutputStream();
-			byte[] data = new byte[BUFFER_SIZE];
-			int count = -1;
-			while ((count = in.read(data, 0, BUFFER_SIZE)) != -1)
-				outStream.write(data, 0, count);
-			data = null;
-
-			bf.setBytes(outStream.toByteArray());
-			return bf;
-		} catch (Exception e) {
+		} catch (IOException e) {
 			throw new HttpAccessFailureException("执行文件下载链接[" + url + "]的GET请求发生异常", e);
 		} finally {
-			if (outStream != null) {
-				try {
-					outStream.close();
-				} catch (IOException e) {
-					throw new CloseableResourceFailureException("关闭ByteArrayOutputStream失败", e);
-				}
-			}
-			if (in != null) {
-				try {
-					in.close();
-				} catch (IOException e) {
-					throw new CloseableResourceFailureException("关闭InputStream失败", e);
-				}
-			}
 			if (response != null) {
-				try {
-					response.close();
-				} catch (IOException e) {
-					throw new CloseableResourceFailureException("关闭http的POST请求响应失败", e);
-				}
-			}
-			if (httpClient != null) {
-				try {
-					httpClient.close();
-				} catch (IOException e) {
-					throw new CloseableResourceFailureException("关闭httpClient对象失败", e);
-				}
+				response.close();
 			}
 		}
 	}
@@ -558,8 +511,8 @@ public class WeixinInterfaceHelper {
 	 * @param response
 	 * @return
 	 */
-	public static String getFileName(CloseableHttpResponse response) {
-		Header contentHeader = response.getFirstHeader("Content-Disposition");
+	private static String getFilename(String headerContent) {
+		Header contentHeader = new BasicHeader("Content-Disposition", headerContent);
 		String filename = null;
 		if (contentHeader != null) {
 			HeaderElement[] values = contentHeader.getElements();
