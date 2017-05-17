@@ -43,8 +43,8 @@ public class MenuTest {
 			.registerTypeAdapter(AbstractMenu.class, new AbstractMenuAdapter()).create();
 
 	private String getAccessToken() {
-		String appID = "wxe2f578fc6340979d";
-		String appSecret = "5697cf4b123083507a04518b1f0e2e45";
+		String appID = "wx7710f3ee377d59de";
+		String appSecret = "2f0303d4c88211c8b376601ce4ef32f9";
 		String url = WeixinConst.WEIXIN_ACCESS_TOKEN_LINK + "&appid=" + appID + "&secret=" + appSecret;
 		AccessToken at = null;
 		try {

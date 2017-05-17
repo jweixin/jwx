@@ -10,21 +10,14 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.Charset;
 
-import org.apache.commons.io.IOUtils;
 import org.apache.http.Header;
 import org.apache.http.HeaderElement;
 import org.apache.http.HttpEntity;
-import org.apache.http.HttpStatus;
 import org.apache.http.NameValuePair;
-import org.apache.http.StatusLine;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
-import org.apache.http.entity.ContentType;
 import org.apache.http.entity.StringEntity;
-import org.apache.http.entity.mime.HttpMultipartMode;
-import org.apache.http.entity.mime.MultipartEntityBuilder;
-import org.apache.http.entity.mime.content.FileBody;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 
@@ -42,14 +35,16 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonSyntaxException;
 
 import okhttp3.MediaType;
+import okhttp3.MultipartBody;
+import okhttp3.MultipartBody.Builder;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 
 /**
- * 微信接口工具类
- * 封装了通过http协议获取微信服务的结果
+ * 微信接口工具类 封装了通过http协议获取微信服务的结果
+ * 
  * @author Administrator
  *
  */
@@ -61,21 +56,18 @@ public class WeixinInterfaceHelper {
 	private static Gson gson = new GsonBuilder().setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
 			.registerTypeAdapter(AbstractButton.class, new AbstractButtonAdapter())
 			.registerTypeAdapter(Button.class, new ButtonAdapter())
-			.registerTypeAdapter(AbstractMenu.class, new AbstractMenuAdapter())
-			.create();
-	
+			.registerTypeAdapter(AbstractMenu.class, new AbstractMenuAdapter()).create();
+
 	/**
 	 * OkHttpClient客户端对象，代表发送http请求的客户端
 	 */
-	private static OkHttpClient client = new OkHttpClient.Builder()
-			.build();
-	
+	private static OkHttpClient client = new OkHttpClient.Builder().build();
+
 	/**
 	 * JSON媒体介质类型
 	 */
-	public static final MediaType MEDIA_TYPE_JSON
-	  = MediaType.parse("application/json; encoding=utf-8");
-	
+	public static final MediaType MEDIA_TYPE_JSON = MediaType.parse("application/json; encoding=utf-8");
+
 	/**
 	 * 缓存大小
 	 */
@@ -83,20 +75,18 @@ public class WeixinInterfaceHelper {
 
 	/**
 	 * 获取get请求返回的json字符串对应的类型对象
+	 * 
 	 * @param url
 	 * @param classOfT
 	 * @return
 	 */
 	public static <T> T get(String url, Class<T> classOfT) {
-		Request request = new Request.Builder()
-				.url(url)
-				.addHeader("Accept", "application/json")
-				.build();
-		
+		Request request = new Request.Builder().url(url).addHeader("Accept", "application/json").build();
+
 		Response response = null;
 		try {
 			response = client.newCall(request).execute();
-			if(response.isSuccessful()){
+			if (response.isSuccessful()) {
 				String jsonStr = response.body().string();
 				// 如果返回值类型不是ReturnCode及其子类
 				if (!ReturnCode.class.isAssignableFrom(classOfT)) {
@@ -112,51 +102,53 @@ public class WeixinInterfaceHelper {
 		} catch (IOException e) {
 			throw new HttpAccessFailureException("执行链接[" + url + "]的GET请求发生异常", e);
 		} finally {
-			if(response != null){
+			if (response != null) {
 				response.close();
 			}
 		}
 	}
-	
+
 	/**
 	 * 检查链接返回字符串是否是微信返回码错误信息
+	 * 
 	 * @param jsonStr
 	 * @param errMessage
 	 */
 	private static void checkErrCode(String jsonStr, String errMessage) {
-		//System.out.println(jsonStr);
-		try{
+		// System.out.println(jsonStr);
+		try {
 			ReturnCode rc = gson.fromJson(jsonStr, ReturnCode.class);
-			//如果存在errcode并且不为0，说明操作返回了错误码
-			if(rc!=null && rc.getErrcode()!=ReturnCode.SC_OK){
-				//System.out.println("->2");
+			// 如果存在errcode并且不为0，说明操作返回了错误码
+			if (rc != null && rc.getErrcode() != ReturnCode.SC_OK) {
+				// System.out.println("->2");
 				throw new IncorrectWeixinReturnCodeException("微信接口返回错误码", rc);
 			}
-		} catch(JsonSyntaxException e){
-			//转换ReturnCode出现异常，不处理跳过
-			//System.out.println("->3");
+		} catch (JsonSyntaxException e) {
+			// 转换ReturnCode出现异常，不处理跳过
+			// System.out.println("->3");
 		}
-		//System.out.println("->4");
+		// System.out.println("->4");
 	}
-	
+
 	/**
 	 * 获取post请求返回的json字符串对应的类型对象
-	 * @param url 请求链接地址
-	 * @param jsonObj post请求体对象
-	 * @param classOfT 返回对象类型
+	 * 
+	 * @param url
+	 *            请求链接地址
+	 * @param jsonObj
+	 *            post请求体对象
+	 * @param classOfT
+	 *            返回对象类型
 	 * @return
 	 */
 	public static <T> T post(String url, Object jsonObj, Class<T> classOfT) {
-		Request request = new Request.Builder()
-				.url(url)
-				.addHeader("Accept", "application/json")
-				.post(RequestBody.create(MEDIA_TYPE_JSON, gson.toJson(jsonObj)))
-				.build();
-		
+		Request request = new Request.Builder().url(url).addHeader("Accept", "application/json")
+				.post(RequestBody.create(MEDIA_TYPE_JSON, gson.toJson(jsonObj))).build();
+
 		Response response = null;
 		try {
 			response = client.newCall(request).execute();
-			if(response.isSuccessful()){
+			if (response.isSuccessful()) {
 				String jsonStr = response.body().string();
 				// 如果返回值类型不是ReturnCode及其子类
 				if (!ReturnCode.class.isAssignableFrom(classOfT)) {
@@ -172,7 +164,7 @@ public class WeixinInterfaceHelper {
 		} catch (IOException e) {
 			throw new HttpAccessFailureException("执行链接[" + url + "]的POST请求发生异常", e);
 		} finally {
-			if(response != null){
+			if (response != null) {
 				response.close();
 			}
 		}
@@ -180,69 +172,70 @@ public class WeixinInterfaceHelper {
 
 	/**
 	 * 上传文件，返回的json字符串对应的类型对象
+	 * 
 	 * @param url
 	 * @param file
 	 * @param fieldName
 	 * @param classOfT
 	 * @return
 	 */
-	public static <T> T upload(String url, File file, String fieldName, Class<T> classOfT) {
-		CloseableHttpClient httpClient = HttpClients.createDefault();
-		HttpPost post = new HttpPost(url);
-		post.setHeader("Accept", "application/json");
-		FileBody fb = new FileBody(file);
+	public static <T> T upload(String url, File file, String mediaFieldName, Class<T> classOfT) {
+		return upload(url, file, mediaFieldName, null, null, classOfT);
+	}
 
-		HttpEntity httpEntity = MultipartEntityBuilder.create().setMode(HttpMultipartMode.BROWSER_COMPATIBLE)
-				.addPart(fieldName, fb).build();
-		post.setEntity(httpEntity);
-		
-		CloseableHttpResponse response = null;
+	/**
+	 * 上传文件，返回的json字符串对应的类型对象
+	 * @param url
+	 * @param file
+	 * @param mediaFieldName
+	 * @param jsonObj
+	 * @param jsonFieldName
+	 * @param classOfT
+	 * @return
+	 */
+	public static <T> T upload(String url, File file, String mediaFieldName, Object jsonObj, String jsonFieldName,
+			Class<T> classOfT) {
+
+		Builder builder = new MultipartBody.Builder().setType(MultipartBody.FORM).addFormDataPart(mediaFieldName,
+				file.getName(), RequestBody.create(MediaType.parse("application/octet-stream"), file));
+
+		if (jsonFieldName != null && jsonObj != null) {
+			builder.addFormDataPart(jsonFieldName, gson.toJson(jsonObj));
+		}
+
+		RequestBody muiltipartBody = builder.build();
+
+		Request request = new Request.Builder().url(url).addHeader("Accept", "application/json").post(muiltipartBody)
+				.build();
+
+		Response response = null;
 		try {
-			response = httpClient.execute(post);
-
-			StatusLine sl = response.getStatusLine();
-			int statusCode = sl.getStatusCode();
-			if (statusCode != HttpStatus.SC_OK) {
+			response = client.newCall(request).execute();
+			if (response.isSuccessful()) {
+				String jsonStr = response.body().string();
+				// 如果返回值类型不是ReturnCode及其子类
+				if (!ReturnCode.class.isAssignableFrom(classOfT)) {
+					checkErrCode(jsonStr, "执行文件上传链接[" + url + "]的POST请求返回微信错误码");
+				}
+				return gson.fromJson(jsonStr, classOfT);
+			} else {
 				HttpReturnStatus status = new HttpReturnStatus();
-				status.setStatusCode(statusCode);
-				status.setReasonPhrase(sl.getReasonPhrase());
+				status.setStatusCode(response.code());
+				status.setReasonPhrase(response.message());
 				throw new IncorrectHttpStatusCodeException("执行文件上传链接[" + url + "]的POST请求发生异常", status);
-			}		
-			
-			String jsonStr = null;
-			try {
-				jsonStr = IOUtils.toString(response.getEntity().getContent(), Charset.forName("UTF-8"));
-			} catch (UnsupportedOperationException | IOException e) {
-				throw new HttpAccessFailureException("获取文件上传链接[" + url + "]的POST请求结果发生异常", e);
 			}
-			// 如果返回值类型不是ReturnCode及其子类
-			if (!ReturnCode.class.isAssignableFrom(classOfT)) {
-				checkErrCode(jsonStr, "执行文件上传链接[" + url + "]的POST请求返回微信错误码");
-			}
-			
-			return gson.fromJson(jsonStr, classOfT);
 		} catch (IOException e) {
 			throw new HttpAccessFailureException("执行文件上传链接[" + url + "]的POST请求发生异常", e);
 		} finally {
 			if (response != null) {
-				try {
-					response.close();
-				} catch (IOException e) {
-					throw new CloseableResourceFailureException("关闭http的POST请求响应失败", e);
-				}
-			}
-			if (httpClient != null) {
-				try {
-					httpClient.close();
-				} catch (IOException e) {
-					throw new CloseableResourceFailureException("关闭httpClient对象失败", e);
-				}
+				response.close();
 			}
 		}
 	}
 
 	/**
 	 * 上传字节数组和json字符串，返回json字符串
+	 * 
 	 * @param url
 	 * @param bytes
 	 * @param mediaFieldName
@@ -252,68 +245,49 @@ public class WeixinInterfaceHelper {
 	 * @param classOfT
 	 * @return
 	 */
-	public static <T> T upload(String url, byte[] bytes, String mediaFieldName, String filename,
-			Object jsonObj, String jsonFieldName, Class<T> classOfT) {
-		CloseableHttpClient httpClient = HttpClients.createDefault();
-		HttpPost post = new HttpPost(url);
-		post.setHeader("Accept", "application/json");
-		MultipartEntityBuilder builder = MultipartEntityBuilder.create().setMode(HttpMultipartMode.BROWSER_COMPATIBLE)
-				.addBinaryBody(mediaFieldName, bytes, ContentType.MULTIPART_FORM_DATA, filename);
-		if (jsonObj != null && jsonFieldName != null) {
-			builder.addTextBody(jsonFieldName, gson.toJson(jsonObj),
-					ContentType.create("application/json", Charset.forName("UTF-8")));
+	public static <T> T upload(String url, byte[] bytes, String mediaFieldName, String filename, Object jsonObj,
+			String jsonFieldName, Class<T> classOfT) {
+
+		Builder builder = new MultipartBody.Builder().setType(MultipartBody.FORM).addFormDataPart(mediaFieldName,
+				filename, RequestBody.create(MediaType.parse("application/octet-stream"), bytes));
+
+		if (jsonFieldName != null && jsonObj != null) {
+			builder.addFormDataPart(jsonFieldName, gson.toJson(jsonObj));
 		}
 
-		HttpEntity httpEntity = builder.build();
-		post.setEntity(httpEntity);
+		RequestBody muiltipartBody = builder.build();
 
-		CloseableHttpResponse response = null;
+		Request request = new Request.Builder().url(url).addHeader("Accept", "application/json").post(muiltipartBody)
+				.build();
+
+		Response response = null;
 		try {
-			response = httpClient.execute(post);
-			
-			StatusLine sl = response.getStatusLine();
-			int statusCode = sl.getStatusCode();
-			if (statusCode != HttpStatus.SC_OK) {
+			response = client.newCall(request).execute();
+			if (response.isSuccessful()) {
+				String jsonStr = response.body().string();
+				// 如果返回值类型不是ReturnCode及其子类
+				if (!ReturnCode.class.isAssignableFrom(classOfT)) {
+					checkErrCode(jsonStr, "执行文件上传链接[" + url + "]的POST请求返回微信错误码");
+				}
+				return gson.fromJson(jsonStr, classOfT);
+			} else {
 				HttpReturnStatus status = new HttpReturnStatus();
-				status.setStatusCode(statusCode);
-				status.setReasonPhrase(sl.getReasonPhrase());
+				status.setStatusCode(response.code());
+				status.setReasonPhrase(response.message());
 				throw new IncorrectHttpStatusCodeException("执行文件上传链接[" + url + "]的POST请求发生异常", status);
-			}		
-			
-			String jsonStr = null;
-			try {
-				jsonStr = IOUtils.toString(response.getEntity().getContent(), Charset.forName("UTF-8"));
-			} catch (UnsupportedOperationException | IOException e) {
-				throw new HttpAccessFailureException("获取文件上传链接[" + url + "]的POST请求结果发生异常", e);
 			}
-			// 如果返回值类型不是ReturnCode及其子类
-			if (!ReturnCode.class.isAssignableFrom(classOfT)) {
-				checkErrCode(jsonStr, "执行文件上传链接[" + url + "]的POST请求返回微信错误码");
-			}
-			
-			return gson.fromJson(jsonStr, classOfT);
 		} catch (IOException e) {
-			throw new HttpAccessFailureException("执行文件上传链接[" + url + "]的POST文件上传请求发生异常", e);
+			throw new HttpAccessFailureException("执行文件上传链接[" + url + "]的POST请求发生异常", e);
 		} finally {
 			if (response != null) {
-				try {
-					response.close();
-				} catch (IOException e) {
-					throw new CloseableResourceFailureException("关闭http的POST请求响应失败", e);
-				}
-			}
-			if (httpClient != null) {
-				try {
-					httpClient.close();
-				} catch (IOException e) {
-					throw new CloseableResourceFailureException("关闭httpClient对象失败", e);
-				}
+				response.close();
 			}
 		}
 	}
 
 	/**
 	 * 上传二进制数组，返回的json字符串对应的类型对象
+	 * 
 	 * @param url
 	 * @param bytes
 	 * @param fieldName
@@ -321,13 +295,13 @@ public class WeixinInterfaceHelper {
 	 * @param classOfT
 	 * @return
 	 */
-	public static <T> T upload(String url, byte[] bytes, String fieldName, String filename,
-			Class<T> classOfT) {
+	public static <T> T upload(String url, byte[] bytes, String fieldName, String filename, Class<T> classOfT) {
 		return upload(url, bytes, fieldName, filename, null, null, classOfT);
 	}
 
 	/**
 	 * post请求，提交json数据，返回字节数组
+	 * 
 	 * @param url
 	 * @param jsonObj
 	 * @return
@@ -348,7 +322,7 @@ public class WeixinInterfaceHelper {
 			if (entity == null) {
 				return null;
 			}
-			
+
 			BytesFile bf = new BytesFile();
 			Header contentHeader = response.getFirstHeader("Content-Disposition");
 			String filename = null;
@@ -370,7 +344,7 @@ public class WeixinInterfaceHelper {
 					}
 				}
 			}
-			
+
 			in = entity.getContent();
 			outStream = new ByteArrayOutputStream();
 			byte[] data = new byte[BUFFER_SIZE];
@@ -416,6 +390,7 @@ public class WeixinInterfaceHelper {
 
 	/**
 	 * get请求，返回字节数组
+	 * 
 	 * @param url
 	 * @return
 	 */
@@ -433,7 +408,7 @@ public class WeixinInterfaceHelper {
 			if (entity == null) {
 				return null;
 			}
-			
+
 			BytesFile bf = new BytesFile();
 			Header contentHeader = response.getFirstHeader("Content-Disposition");
 			String filename = null;
@@ -455,7 +430,7 @@ public class WeixinInterfaceHelper {
 					}
 				}
 			}
-			
+
 			in = entity.getContent();
 			outStream = new ByteArrayOutputStream();
 			byte[] data = new byte[BUFFER_SIZE];
@@ -463,7 +438,7 @@ public class WeixinInterfaceHelper {
 			while ((count = in.read(data, 0, BUFFER_SIZE)) != -1)
 				outStream.write(data, 0, count);
 			data = null;
-			
+
 			bf.setBytes(outStream.toByteArray());
 			return bf;
 		} catch (Exception e) {
@@ -505,7 +480,7 @@ public class WeixinInterfaceHelper {
 	 * 
 	 * @param bytes
 	 * @return
-	 * @throws WeixinInterfaceException 
+	 * @throws WeixinInterfaceException
 	 */
 	public static File getFile(byte[] bytes, String outputFile) {
 		File file = new File(outputFile);
@@ -538,10 +513,11 @@ public class WeixinInterfaceHelper {
 
 	/**
 	 * 将文件转换为字节数组
+	 * 
 	 * @param filePath
 	 * @return
 	 */
-	public static byte[] getBytes(String filePath){
+	public static byte[] getBytes(String filePath) {
 		byte[] buffer = null;
 		FileInputStream fis = null;
 		ByteArrayOutputStream bos = null;
