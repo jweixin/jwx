@@ -1,4 +1,4 @@
-# jwx(java微信公众号MVC开发框架) QQ群：249705963
+# jwx(java微信公众号MVC开发框架)	QQ群：249705963
 
 > jwx是开源的java公众号开发MVC框架，基于spring配置文件和微信消息或事件注解，通过微信上下文处理一个或多个微信公众号服务请求。目的主要有两个，其一生封装微信请求xml消息为java实体对象，将返回对象转换为xml响应消息；其二是封装微信接口为java服务。微信公众号采用web服务作为消息与第三方平台发生交互，数据格式主要是xml和json，普通的web请求响应机制采用xml数据格式交互，微信接口服务采用json数据格式。jwx主要对这两个方面做了封装处理，另外借鉴springmvc的请求处理方式，以WeixinDispatcherServlet类作为消息分发控制器，通过消息组装工厂生成请求消息或事件实体，根据消息或事件类型，在消息策略处理工厂查找处理策略，获取相应的微信处理方法，Servlet获取到处理方法后，请求线程池获取线程调用微信方法，根据微信方法的返回值，生成请求的xml响应。本说明文档将分章节说明jwx框架的特征、快速入门、配置、扩展等各个方面。
 ## 一、特征
@@ -211,6 +211,13 @@ WeixinConfigurer是微信上下文全局配置类，里面包含了处理微信�
 
 ### 2、@Weixin注解
 
-@Weixin是用来配置微信上下文的，该注解使用在微信控制器类上。
+@Weixin是用来配置微信上下文的，该注解使用在微信控制器类上。每个被@Weixin注解包围的类会在web应用启动时被扫描，配置项会加载到微信上下文中，@Weixin注解的参数说明：
 
-​
+- value：代表微信上下文关键字，不能为空，在微信公众号基本配置中，处于URL配置的最后部分。例如微信公众号的URL(服务器地址)配置是：http://nalan_weixin.tunnel.qydev.com/weixin/wx/coreServlet，其中http://nalan_weixin.tunnel.qydev.com是主机栏，/weixin是web应用的上下文栏，那么value值应该是/wx/coreServlet，一个公众号可以有多个类拥有@Weixin注解，如果多个注解的value相同，则会认为是同一个微信上下文，在jwx中，区分上下文的唯一标识就是@Weixin注解的value值配置。@Weixin注解还有其他4个配置项，都有缺省值，在一个微信控制器类中配置了其他4个值，那么相同value值得控制器类只需要配置value项就可以了，如果value配置项相同，而其他4个配置项的同项配置不同，jwx在初始启动扫描阶段会给出报错提示。
+- token：代表微信公众号基本配置中的Token(令牌)项的值。
+- encodingAESKey：代表微信公众号基本配置中的EncodingAESKey(消息加解密密钥)，该项如果没有配置，那么jwx不能处理加密的请求消息，在jwx初始启动阶段会给出告警提示。如果我们配置了消息加解密方式为安全模式，没有配置encodingAESKey项，则运行阶段会报错。另外如果在加密请求消息到达时报如下错误：java.security.InvalidKeyException:illegal Key Size，则说明当前运行的JDK没有用JCE无限制权限策略文件替换相应的安全jar包，**解决方案：在官方网站下载JCE无限制权限策略文件（请到官网下载对应的版本， 例如JDK7的下载地址：http://www.oracle.com/technetwork/java/javase/downloads/jce-7-download-432124.html下载后解压，可以看到local_policy.jar和US_export_policy.jar以及readme.txt，如果安装了JRE，将两个jar文件放到%JRE_HOME%\lib\security目录下覆盖原来的文件；如果安装了JDK，将两个jar文件放到%JDK_HOME%\jre\lib\security目录下覆盖原来文件**。
+- appID：代表微信公众号基本配置中的AppID(应用ID)。
+- appSecret：代表微信公众号基本配置中的AppSecret(应用密钥)。
+
+### 3、微信方法
+
