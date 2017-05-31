@@ -233,6 +233,7 @@ public class WeixinDispatcherServlet extends HttpServlet {
 		WeixinContext context = contextMapper.get(url);
 		if (context == null) {
 			context = new WeixinContext();
+			logger.debug("新建微信上下文(" + url + ")");
 			contextMapper.put(url, context);
 		}
 
@@ -280,7 +281,7 @@ public class WeixinDispatcherServlet extends HttpServlet {
 		// 解析微信方法
 		for (Method method : methods) {
 			if (WeixinMethod.hasWeixinAnnotationType(method)) {
-				logger.debug("解析微信方法:" + method.getName());
+				logger.debug("解析微信上下文(" + url + ")微信方法:" + method.getName());
 				parseWeixinMethod(context, method, wxObj);
 			}
 		}
