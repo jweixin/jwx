@@ -15,13 +15,13 @@
 ## 二、快速入门
 本章教材提供一个最简单的例子，用户在微信公众号发一条foo的文本请求消息，公众号响应一条bar的文本响应消息。
 ### 1、maven配置文件
-通过maven生成一个webapp项目，例如项目名为weixin，在maven配置文件pom.xml中添加jwx依赖，jwx的1.0.0jar包已经提交到maven中心仓库，通过[中心仓库](http://search.maven.org/)搜索jwx关键字可以获取jar包依赖配置。
+通过maven生成一个webapp项目，例如项目名为weixin，在maven配置文件pom.xml中添加jwx依赖，jwx的1.1.1jar包已经提交到maven中心仓库，通过[中心仓库](http://search.maven.org/)搜索jwx关键字可以获取jar包依赖配置。
 
 ```xml
 <dependency>
     <groupId>com.github.jweixin</groupId>
     <artifactId>jwx</artifactId>
-    <version>1.1.0</version>
+    <version>1.1.1</version>
 </dependency>
 ```
 

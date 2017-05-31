@@ -40,7 +40,9 @@ public class WeixinInterfaceHelper {
 	/**
 	 * 设置json命名策略，java对象域驼峰格式，json字符串是小写下划线格式
 	 */
-	private static Gson gson = new GsonBuilder().setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
+	private static Gson gson = new GsonBuilder()
+			.disableHtmlEscaping()
+			.setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
 			.registerTypeAdapter(AbstractButton.class, new AbstractButtonAdapter())
 			.registerTypeAdapter(Button.class, new ButtonAdapter())
 			.registerTypeAdapter(AbstractMenu.class, new AbstractMenuAdapter()).create();
