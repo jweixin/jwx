@@ -2,6 +2,7 @@ package com.github.jweixin.jwx.config;
 
 import java.util.List;
 
+import com.github.jweixin.jwx.context.WeixinParameterConfig;
 import com.github.jweixin.jwx.message.cache.ConcurrentHashMapMessageKeyCache;
 import com.github.jweixin.jwx.message.cache.MessageKeyCache;
 
@@ -19,6 +20,10 @@ public class WeixinConfigurer {
 	 * 微信key值缓存，用于微信消息重排
 	 */
 	private MessageKeyCache messageKeyCache = new ConcurrentHashMapMessageKeyCache();
+	/**
+	 * 微信公众基本配置
+	 */
+	private WeixinParameterConfig weixinParameterConfig;
 	/**
 	 * 配置线程池大小
 	 */
@@ -58,6 +63,14 @@ public class WeixinConfigurer {
 
 	public void setWeixinMethodTimeoutThreshold(long weixinMethodTimeoutThreshold) {
 		this.weixinMethodTimeoutThreshold = weixinMethodTimeoutThreshold;
+	}
+
+	public WeixinParameterConfig getWeixinParameterConfig() {
+		return weixinParameterConfig;
+	}
+
+	public void setWeixinParameterConfig(WeixinParameterConfig weixinParameterConfig) {
+		this.weixinParameterConfig = weixinParameterConfig;
 	}
 
 }

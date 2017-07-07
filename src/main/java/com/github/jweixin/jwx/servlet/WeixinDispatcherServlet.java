@@ -49,6 +49,8 @@ import com.github.jweixin.jwx.context.WeixinContextConfigHelper;
 import com.github.jweixin.jwx.context.WeixinInMsgHandleException;
 import com.github.jweixin.jwx.context.WeixinMethod;
 import com.github.jweixin.jwx.context.WeixinMethodInvocationTask;
+import com.github.jweixin.jwx.context.WeixinParameterConfig;
+import com.github.jweixin.jwx.context.WeixinSetting;
 import com.github.jweixin.jwx.message.InMessageFactory;
 import com.github.jweixin.jwx.message.cache.MessageKeyCache;
 import com.github.jweixin.jwx.message.custom.CustomImageMessage;
@@ -95,6 +97,7 @@ import com.github.jweixin.jwx.weixin.entity.ReturnCode;
  * 2017-3-2 增加方法调用异常处理 
  * 2017-3-9 增加线程池执行微信方法部分 
  * 2017-5-11 修改包扫描获取微信注解类部分
+ * 2017-7-4 增加spring可以配置微信基本参数部分
  */
 public class WeixinDispatcherServlet extends HttpServlet {
 
@@ -132,6 +135,10 @@ public class WeixinDispatcherServlet extends HttpServlet {
 	 * 微信方法调用超时阀值
 	 */
 	private long weixinMethodTimeoutThreshold;
+	/**
+	 * 微信公众基本配置
+	 */
+	private WeixinParameterConfig weixinParameterConfig;
 
 	@Override
 	public void init(ServletConfig config) throws ServletException {
@@ -188,6 +195,48 @@ public class WeixinDispatcherServlet extends HttpServlet {
 			logger.debug("解析微信类:" + clazz.getName());
 			parseWeixinClass(clazz);
 		}
+		
+		// 获取微信公众号的基本配置
+		weixinParameterConfig = weixinConfig.getWeixinParameterConfig();
+		
+		if(weixinParameterConfig != null){
+			List<WeixinSetting> list = weixinParameterConfig.getWeixinSettings();
+			if(list != null && list.size()>0){
+				Iterator<WeixinSetting> iterator = list.iterator();
+				while(iterator.hasNext()){
+					WeixinSetting setting = iterator.next();
+					String url = setting.getUrl();
+					if(!StringUtil.isNull(url)){
+						WeixinContext context = contextMapper.get(url);
+						if(context!=null){
+							// 配置上下文的encodingAESKey值
+							String encodingAESKey = setting.getEncodingAESKey();
+							if (!StringUtil.isNull(encodingAESKey)) {
+								context.setEncodingAESKey(encodingAESKey);
+							}
+
+							// token配置
+							String token = setting.getToken();
+							if (!StringUtil.isNull(token)) {
+								context.setToken(token);
+							}
+
+							// 开发者应用ID配置
+							String appID = setting.getAppID();
+							if (!StringUtil.isNull(appID)) {
+								context.setAppID(appID);
+							}
+
+							// 开发者应用密钥配置
+							String appSecret = setting.getAppSecret();
+							if (!StringUtil.isNull(appSecret)) {
+								context.setAppSecret(appSecret);
+							}
+						}
+					}
+				}
+			}
+		}
 
 		// 迭代处理生成微信上下文消息加密工具WXBizMsgCrypt
 		Iterator<Entry<String, WeixinContext>> iterator = contextMapper.entrySet().iterator();
@@ -207,7 +256,7 @@ public class WeixinDispatcherServlet extends HttpServlet {
 		// 配置微信消息缓存
 		messageKeyCache = weixinConfig.getMessageKeyCache();
 
-		// 配置微信方法执行线程池
+		// 配置微信方法执行线程池大小
 		executorService = Executors.newFixedThreadPool(weixinConfig.getThreadPoolSize());
 
 		// 配置微信方法调用超时阀值
@@ -241,30 +290,16 @@ public class WeixinDispatcherServlet extends HttpServlet {
 		if (StringUtil.isNull(context.getUrl())) {
 			context.setUrl(url);
 		}
-
-		// 配置上下文的encodingAESKey值
-		String encodingAESKey = wx.encodingAESKey();
-		if (!StringUtil.isNull(encodingAESKey)) {
-			WeixinContextConfigHelper.setFieldValue(context, "encodingAESKey", encodingAESKey);
-		}
-
-		// token配置
-		String token = wx.token();
-		if (!StringUtil.isNull(token)) {
-			WeixinContextConfigHelper.setFieldValue(context, "token", token);
-		}
-
-		// 开发者应用ID配置
-		String appID = wx.appID();
-		if (!StringUtil.isNull(appID)) {
-			WeixinContextConfigHelper.setFieldValue(context, "appID", appID);
-		}
-
-		// 开发者应用密钥配置
-		String appSecret = wx.appSecret();
-		if (!StringUtil.isNull(appSecret)) {
-			WeixinContextConfigHelper.setFieldValue(context, "appSecret", appSecret);
-		}
+		
+		WeixinSetting setting = new WeixinSetting();
+		setting.setUrl(url);
+		setting.setAppID(wx.appID());
+		setting.setAppSecret(wx.appSecret());
+		setting.setEncodingAESKey(wx.encodingAESKey());
+		setting.setToken(wx.token());
+		
+		//配置微信参数
+		setContextParameter(context, setting);
 
 		Object wxObj;
 		try {
@@ -284,6 +319,38 @@ public class WeixinDispatcherServlet extends HttpServlet {
 				logger.debug("解析微信上下文(" + url + ")微信方法:" + method.getName());
 				parseWeixinMethod(context, method, wxObj);
 			}
+		}
+	}
+	
+	/**
+	 * 设置微信上下文基本设置
+	 * @param context
+	 * @param setting
+	 * @throws InitialWeixinConfigureException
+	 */
+	private void setContextParameter(WeixinContext context, WeixinSetting setting) throws InitialWeixinConfigureException{
+		// 配置上下文的encodingAESKey值
+		String encodingAESKey = setting.getEncodingAESKey();
+		if (!StringUtil.isNull(encodingAESKey)) {
+			WeixinContextConfigHelper.setFieldValue(context, "encodingAESKey", encodingAESKey);
+		}
+
+		// token配置
+		String token = setting.getToken();
+		if (!StringUtil.isNull(token)) {
+			WeixinContextConfigHelper.setFieldValue(context, "token", token);
+		}
+
+		// 开发者应用ID配置
+		String appID = setting.getAppID();
+		if (!StringUtil.isNull(appID)) {
+			WeixinContextConfigHelper.setFieldValue(context, "appID", appID);
+		}
+
+		// 开发者应用密钥配置
+		String appSecret = setting.getAppSecret();
+		if (!StringUtil.isNull(appSecret)) {
+			WeixinContextConfigHelper.setFieldValue(context, "appSecret", appSecret);
 		}
 	}
 

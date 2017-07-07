@@ -4,7 +4,7 @@
 
 	<groupId>com.github.jweixin</groupId>
 	<artifactId>jwx</artifactId>
-	<version>1.1.1</version>
+	<version>1.2.0</version>
 	<packaging>jar</packaging>
 
 	<name>jwx</name>
